@@ -47,6 +47,7 @@ public final class OIDCConfigAttributes {
     public static final String USE_MTLS_HOK_TOKEN = "tls.client.certificate.bound.access.tokens";
 
     public static final String DPOP_BOUND_ACCESS_TOKENS = "dpop.bound.access.tokens";
+    public static final String DPOP_BOUND_ONLY_REFRESH_TOKENS = "dpop.bound.only.refresh.tokens";
 
     public static final String ID_TOKEN_SIGNED_RESPONSE_ALG = "id.token.signed.response.alg";
 

@@ -20,11 +20,7 @@ package org.keycloak.testsuite.oauth;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.keycloak.testsuite.util.ClientPoliciesUtil.createClientAccessTypeConditionConfig;
 import static org.keycloak.testsuite.util.ClientPoliciesUtil.createDPoPBindEnforcerExecutorConfig;
 import static org.keycloak.testsuite.util.ClientPoliciesUtil.createEcJwk;
@@ -132,12 +128,12 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
         jwsRsaHeader = new JWSHeader(org.keycloak.jose.jws.Algorithm.PS256, DPOP_JWT_HEADER_TYPE, jwkRsa.getKeyId(), jwkRsa);
         jwsEcHeader = new JWSHeader(org.keycloak.jose.jws.Algorithm.ES256, DPOP_JWT_HEADER_TYPE, jwkEc.getKeyId(), jwkEc);
 
-        changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, true);
+        changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, true, false);
 
         createClientByAdmin(TEST_PUBLIC_CLIENT_ID, (ClientRepresentation rep) -> {
             rep.setPublicClient(Boolean.TRUE);
         });
-        changeDPoPBound(TEST_PUBLIC_CLIENT_ID, true);
+        changeDPoPBound(TEST_PUBLIC_CLIENT_ID, true, false);
     }
 
     @Override
@@ -214,7 +210,7 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
         assertNull(refreshToken.getConfirmation());
 
         String tokenResponse = oauth.introspectTokenWithClientCredential(TEST_CONFIDENTIAL_CLIENT_ID, TEST_CONFIDENTIAL_CLIENT_SECRET, "access_token", response.getAccessToken());
-        Assert.assertNotNull(tokenResponse);
+        assertNotNull(tokenResponse);
         TokenMetadataRepresentation tokenMetadataRepresentation = JsonSerialization.readValue(tokenResponse, TokenMetadataRepresentation.class);
         Assert.assertTrue(tokenMetadataRepresentation.isActive());
         assertEquals(jkt, tokenMetadataRepresentation.getConfirmation().getKeyThumbprint());
@@ -222,7 +218,7 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
 
         CloseableHttpResponse closableHttpResponse = oauth.doTokenRevoke(response.getAccessToken(), "access_token", TEST_CONFIDENTIAL_CLIENT_SECRET);
         tokenResponse = oauth.introspectTokenWithClientCredential(TEST_CONFIDENTIAL_CLIENT_ID, TEST_CONFIDENTIAL_CLIENT_SECRET, "access_token", response.getAccessToken());
-        Assert.assertNotNull(tokenResponse);
+        assertNotNull(tokenResponse);
         tokenMetadataRepresentation = JsonSerialization.readValue(tokenResponse, TokenMetadataRepresentation.class);
         Assert.assertFalse(tokenMetadataRepresentation.isActive());
         closableHttpResponse.close();
@@ -251,7 +247,7 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
     @Test
     public void testDPoPDisabledByPublicClient() throws Exception {
 
-        changeDPoPBound(TEST_PUBLIC_CLIENT_ID, false);
+        changeDPoPBound(TEST_PUBLIC_CLIENT_ID, false, false);
         try {
             // with DPoP proof
             testDPoPByPublicClient();
@@ -281,7 +277,44 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
 
             oauth.idTokenHint(response.getIdToken()).openLogout();
         } finally {
-            changeDPoPBound(TEST_PUBLIC_CLIENT_ID, true);
+            changeDPoPBound(TEST_PUBLIC_CLIENT_ID, true, false);
+        }
+    }
+
+    @Test
+    public void testDPoPOnlyEnabledForRefreshTokensByPublicClient() throws Exception {
+
+        changeDPoPBound(TEST_PUBLIC_CLIENT_ID, true, true);
+        try {
+            // with DPoP proof
+            testDPoPByPublicClient();
+
+            // without DPoP proof
+            oauth.clientId(TEST_PUBLIC_CLIENT_ID);
+            oauth.dpopProof(null);
+            oauth.doLogin(TEST_USER_NAME, TEST_USER_PASSWORD);
+
+            String code = oauth.getCurrentQuery().get(OAuth2Constants.CODE);
+            OAuthClient.AccessTokenResponse response = oauth.doAccessTokenRequest(code, null);
+
+            assertEquals(Status.OK.getStatusCode(), response.getStatusCode());
+            AccessToken accessToken = oauth.verifyToken(response.getAccessToken());
+            assertEquals(null, accessToken.getConfirmation());
+            RefreshToken refreshToken = oauth.parseRefreshToken(response.getRefreshToken());
+            assertNotNull(refreshToken.getConfirmation());
+
+            // token refresh
+            response = oauth.doRefreshTokenRequest(response.getRefreshToken(), null);
+
+            assertEquals(Status.OK.getStatusCode(), response.getStatusCode());
+            accessToken = oauth.verifyToken(response.getAccessToken());
+            assertEquals(null, accessToken.getConfirmation());
+            refreshToken = oauth.parseRefreshToken(response.getRefreshToken());
+            assertNotNull(refreshToken.getConfirmation());
+
+            oauth.idTokenHint(response.getIdToken()).openLogout();
+        } finally {
+            changeDPoPBound(TEST_PUBLIC_CLIENT_ID, true, false);
         }
     }
 
@@ -425,7 +458,7 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
     @Test
     public void testDPoPDisabledOnUserInfo() throws Exception {
 
-        changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, false);
+        changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, false, false);
         try {
             KeyPair rsaKeyPair = KeyUtils.generateRsaKeyPair(2048);
             OAuthClient.AccessTokenResponse response = getDPoPBindAccessToken(rsaKeyPair);
@@ -439,7 +472,28 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
 
             oauth.doLogout(response.getRefreshToken(), TEST_CONFIDENTIAL_CLIENT_SECRET);
         } finally {
-            changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, true);
+            changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, true, false);
+        }
+    }
+
+    @Test
+    public void testDPoPOnlyEnabledForRefreshTokensOnUserInfo() throws Exception {
+
+        changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, true, true);
+        try {
+            KeyPair rsaKeyPair = KeyUtils.generateRsaKeyPair(2048);
+            OAuthClient.AccessTokenResponse response = getDPoPBindAccessToken(rsaKeyPair);
+            doSuccessfulUserInfoGet(response.getAccessToken(), rsaKeyPair);
+
+            // delete DPoP proof
+            oauth.dpopProof(null);
+            UserInfoResponse userInfoResponse = oauth.doUserInfoRequestByGet(response.getAccessToken());
+            assertEquals(401, userInfoResponse.getStatusCode());
+            assertEquals("Bearer realm=\"test\", error=\"invalid_token\", error_description=\"DPoP proof and token binding verification failed\"", userInfoResponse.getHeaders().get("WWW-Authenticate"));
+
+            oauth.doLogout(response.getRefreshToken(), TEST_CONFIDENTIAL_CLIENT_SECRET);
+        } finally {
+            changeDPoPBound(TEST_CONFIDENTIAL_CLIENT_ID, true, false);
         }
     }
 
@@ -713,10 +767,11 @@ public class DPoPTest extends AbstractTestRealmKeycloakTest {
         assertEquals(errorDescription, response.getErrorDescription());
     }
 
-    private void changeDPoPBound(String clientId, boolean isEnabled) {
+    private void changeDPoPBound(String clientId, boolean isEnabled, boolean isEnabledForRefreshTokensOnly) {
         ClientResource clientResource = ApiUtil.findClientByClientId(adminClient.realm(REALM_NAME), clientId);
         ClientRepresentation clientRep = clientResource.toRepresentation();
         OIDCAdvancedConfigWrapper.fromClientRepresentation(clientRep).setUseDPoP(isEnabled);
+        OIDCAdvancedConfigWrapper.fromClientRepresentation(clientRep).setUseDPoPForRefreshTokensOnly(isEnabledForRefreshTokensOnly);
         clientResource.update(clientRep);
     }
 

@@ -185,6 +185,16 @@ public class OIDCAdvancedConfigWrapper extends AbstractClientConfigWrapper {
         setAttribute(OIDCConfigAttributes.DPOP_BOUND_ACCESS_TOKENS, val);
     }
 
+    public boolean isUseDPoPForRefreshTokensOnly() {
+        String mode = getAttribute(OIDCConfigAttributes.DPOP_BOUND_ONLY_REFRESH_TOKENS, "false");
+        return Boolean.parseBoolean(mode);
+    }
+
+    public void setUseDPoPForRefreshTokensOnly(boolean useDPoP) {
+        String val = String.valueOf(useDPoP);
+        setAttribute(OIDCConfigAttributes.DPOP_BOUND_ONLY_REFRESH_TOKENS, val);
+    }
+
     // KEYCLOAK-6771 Certificate Bound Token
     // https://tools.ietf.org/html/draft-ietf-oauth-mtls-08#section-6.5
     public boolean isUseMtlsHokToken() {

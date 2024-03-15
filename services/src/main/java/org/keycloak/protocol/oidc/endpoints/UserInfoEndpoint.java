@@ -249,7 +249,8 @@ public class UserInfoEndpoint {
         }
 
         if (Profile.isFeatureEnabled(Profile.Feature.DPOP)) {
-            if (OIDCAdvancedConfigWrapper.fromClientModel(clientModel).isUseDPoP() || DPoPUtil.DPOP_TOKEN_TYPE.equals(token.getType())) {
+            OIDCAdvancedConfigWrapper clientConfig = OIDCAdvancedConfigWrapper.fromClientModel(clientModel);
+            if ((clientConfig.isUseDPoP() && !clientConfig.isUseDPoPForRefreshTokensOnly()) || DPoPUtil.DPOP_TOKEN_TYPE.equals(token.getType())) {
                 try {
                     DPoP dPoP = new DPoPUtil.Validator(session).request(request).uriInfo(session.getContext().getUri()).validate();
                     DPoPUtil.validateBinding(token, dPoP);
