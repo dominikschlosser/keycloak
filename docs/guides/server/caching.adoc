@@ -23,6 +23,8 @@ To explicitly enable distributed infinispan caching, enter this command:
 When you start {project_name} in development mode, by using the `start-dev` command, {project_name} uses only local caches and distributed caches are completely disabled by implicitly setting the `--cache=local` option.
 The `local` cache mode is intended only for development and testing purposes.
 
+Additionally, a `none` cache mode is available. When `--cache=none` is set, {project_name} will completely disable Infinispan caching. This mode can be useful for specific development scenarios, for running in highly resource-constrained environments where caching is not desired, or during certain types of troubleshooting and testing. When this mode is active, {project_name} will attempt to load a minimal configuration from `conf/cache-none.xml` which defines no caches.
+
 == Configuring caches
 {project_name} provides a cache configuration file with sensible defaults located at `conf/cache-ispn.xml`.
 

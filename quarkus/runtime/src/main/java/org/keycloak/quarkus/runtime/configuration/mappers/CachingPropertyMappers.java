@@ -49,12 +49,18 @@ final class CachingPropertyMappers {
                                 return "cache-local.xml";
                             } else if (CachingOptions.Mechanism.ispn.name().equals(value)) {
                                 return resolveConfigFile("cache-ispn.xml", null);
+                            } else if (CachingOptions.Mechanism.none.name().equals(value)) {
+                                return resolveConfigFile("cache-none.xml", null);
                             } else
                                 return null;
                         })
                         .to("kc.spi-cache-embedded-default-config-file")
                         .transformer(CachingPropertyMappers::resolveConfigFile)
                         .validator(s -> {
+                            // Skip validation for "cache-none.xml" as it might not exist in the same way
+                            if ("cache-none.xml".equals(s) || (s !=null && s.endsWith("cache-none.xml"))) {
+                                return;
+                            }
                             if (!Files.exists(Paths.get(resolveConfigFile(s, null)))) {
                                 throw new PropertyException("Cache config file '%s' does not exist in the conf directory".formatted(s));
                             }

@@ -33,7 +33,8 @@ public class CachingOptions {
 
     public enum Mechanism {
         ispn,
-        local
+    local,
+    none
     }
 
     public static final Option<Mechanism> CACHE = new OptionBuilder<>("cache", Mechanism.class)
