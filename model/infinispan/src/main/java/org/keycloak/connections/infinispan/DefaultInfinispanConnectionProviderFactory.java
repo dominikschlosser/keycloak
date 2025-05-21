@@ -31,6 +31,7 @@ import org.infinispan.manager.DefaultCacheManager;
 import org.infinispan.manager.EmbeddedCacheManager;
 import org.jboss.logging.Logger;
 import org.keycloak.Config;
+import org.keycloak.config.CachingOptions; // Added for CachingOptions.Mechanism.none
 import org.keycloak.cluster.ClusterEvent;
 import org.keycloak.cluster.ClusterProvider;
 import org.keycloak.connections.infinispan.remote.RemoteInfinispanConnectionProvider;
@@ -88,6 +89,18 @@ public class DefaultInfinispanConnectionProviderFactory implements InfinispanCon
 
     @Override
     public InfinispanConnectionProvider create(KeycloakSession session) {
+        // First, check for the "none" cache mode before any other initialization.
+        // The 'config' field should be initialized by the 'init' method.
+        if (this.config != null && CachingOptions.Mechanism.none.name().equals(this.config.get("cache", CachingOptions.Mechanism.ispn.name()))) {
+            // If connectionProvider is already a NoOp instance, return it.
+            // Otherwise, create and set it. This handles idempotency and ensures
+            // the correct provider type is used if this method is called multiple times.
+            if (this.connectionProvider == null || !(this.connectionProvider instanceof NoOpInfinispanConnectionProvider)) {
+                logger.info("Infinispan is disabled (kc.cache=none), returning NoOpInfinispanConnectionProvider.");
+                this.connectionProvider = new NoOpInfinispanConnectionProvider();
+            }
+            return this.connectionProvider;
+        }
         return lazyInit(session);
     }
 
@@ -148,12 +161,31 @@ public class DefaultInfinispanConnectionProviderFactory implements InfinispanCon
     }
 
     protected InfinispanConnectionProvider lazyInit(KeycloakSession keycloakSession) {
+        // This part of the method is now only reached if cache mode is not "none".
+        // The initial check for "none" is done in the overridden create() method.
+        // However, to be absolutely safe in case lazyInit is called directly elsewhere,
+        // or if config could change (unlikely for this property post-init),
+        // we can re-verify or ensure connectionProvider is not null from a "none" setup.
+
         if (connectionProvider != null) {
+            // If connectionProvider is already set (e.g. to NoOp by create(), or by a previous call), return it.
             return connectionProvider;
         }
+
         synchronized (this) {
+            // Double-check after acquiring the lock
             if (connectionProvider != null) {
                 return connectionProvider;
+            }
+
+            // Re-check for "none" cache mode inside synchronized block to handle concurrent calls correctly
+            // and ensure we don't initialize Infinispan if 'none' was set.
+            if (this.config != null && CachingOptions.Mechanism.none.name().equals(this.config.get("cache", CachingOptions.Mechanism.ispn.name()))) {
+                if (this.connectionProvider == null || !(this.connectionProvider instanceof NoOpInfinispanConnectionProvider)) {
+                    logger.info("Infinispan is disabled (kc.cache=none) inside sync block, returning NoOpInfinispanConnectionProvider.");
+                    this.connectionProvider = new NoOpInfinispanConnectionProvider();
+                }
+                return this.connectionProvider;
             }
 
             this.cacheManager = createEmbeddedCacheManager(keycloakSession);

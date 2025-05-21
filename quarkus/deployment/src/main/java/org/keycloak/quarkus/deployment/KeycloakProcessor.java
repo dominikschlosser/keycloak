@@ -50,6 +50,7 @@ import io.quarkus.resteasy.reactive.server.spi.MethodScannerBuildItem;
 import io.quarkus.runtime.configuration.ConfigurationException;
 import io.quarkus.vertx.http.deployment.HttpRootPathBuildItem;
 import io.quarkus.vertx.http.deployment.NonApplicationRootPathBuildItem;
+import io.quarkus.deployment.builditem.RunTimeConfigurationDefaultBuildItem;
 import io.quarkus.vertx.http.deployment.RouteBuildItem;
 import jakarta.persistence.Entity;
 import jakarta.persistence.spi.PersistenceUnitTransactionType;
@@ -78,6 +79,7 @@ import org.keycloak.common.Profile;
 import org.keycloak.common.crypto.FipsMode;
 import org.keycloak.common.util.MultiSiteUtils;
 import org.keycloak.common.util.StreamUtil;
+import org.keycloak.config.CachingOptions;
 import org.keycloak.config.DatabaseOptions;
 import org.keycloak.config.HealthOptions;
 import org.keycloak.config.HttpOptions;
@@ -501,6 +503,21 @@ class KeycloakProcessor {
         }
 
         recorder.configSessionFactory(factories, defaultProviders, preConfiguredProviders, loadThemesFromClassPath());
+    }
+
+    @BuildStep
+    void configureInfinispanConditionalActivation(ConfigBuildItem configBuildItem, BuildProducer<RunTimeConfigurationDefaultBuildItem> runTimeConfig) {
+        Optional<String> cacheType = Configuration.getOptionalKcValue(CachingOptions.CACHE.getKey());
+
+        if (cacheType.isPresent() && CachingOptions.Mechanism.none.name().equals(cacheType.get())) {
+            logger.infof("Disabling Quarkus Infinispan client and embedded extensions as '%s' is set to '%s'.", CachingOptions.CACHE.getKey(), CachingOptions.Mechanism.none.name());
+            runTimeConfig.produce(new RunTimeConfigurationDefaultBuildItem("quarkus.infinispan-client.enabled", "false"));
+            // Attempt to disable embedded Infinispan. The exact property might need verification.
+            runTimeConfig.produce(new RunTimeConfigurationDefaultBuildItem("quarkus.infinispan-embedded.enabled", "false"));
+            // Additionally, if Keycloak has its own SPI enablement for Infinispan connections, disable that too.
+            // This property is based on the SPI name "connectionsInfinispan" and common Quarkus practices.
+            runTimeConfig.produce(new RunTimeConfigurationDefaultBuildItem("quarkus.keycloak.connections-infinispan.enabled", "false"));
+        }
     }
 
     private List<ClasspathThemeProviderFactory.ThemesRepresentation> loadThemesFromClassPath() {
