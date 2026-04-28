@@ -1638,6 +1638,7 @@ public class OID4VCIssuerEndpoint {
                     return null;
                 })
                 .filter(Objects::nonNull)
+                .filter(mapper -> mapper.supportsCredentialFormat(credentialScopeModel.getFormat()))
                 .toList();
 
         VCIssuanceContext vcIssuanceContext = getVCToSign(protocolMappers, credentialConfig, authResult, authDetail, credentialRequestVO, credentialScopeModel, eventBuilder);
@@ -1729,18 +1730,33 @@ public class OID4VCIssuerEndpoint {
                 .setType(credentialScopeModel.getSupportedCredentialTypes());
 
         Map<String, Object> subjectClaims = new HashMap<>();
-        protocolMappers.forEach(mapper -> mapper.setClaim(subjectClaims, authResult.session()));
-
         Map<String, Object> subjectClaimsWithMetadataPrefix = new HashMap<>();
-        protocolMappers
-                .forEach(mapper -> mapper.setClaimWithMetadataPrefix(subjectClaims, subjectClaimsWithMetadataPrefix));
+
+        if (VCFormat.MSO_MDOC.equals(credentialConfig.getFormat())) {
+            // mDoc data element identifiers may repeat across namespaces while sharing one raw claim key, so each
+            // mapper value is captured into the namespaced map before the next mapper can overwrite that key.
+            protocolMappers.forEach(mapper -> {
+                mapper.setClaim(subjectClaims, authResult.session());
+                mapper.setClaimWithMetadataPrefix(subjectClaims, subjectClaimsWithMetadataPrefix);
+            });
+        } else {
+            protocolMappers.forEach(mapper -> mapper.setClaim(subjectClaims, authResult.session()));
+            protocolMappers
+                    .forEach(mapper -> mapper.setClaimWithMetadataPrefix(subjectClaims, subjectClaimsWithMetadataPrefix));
+        }
 
         // Validate that requested claims from authorization_details are present
         String credentialConfigId = credentialConfig.getId();
         validateRequestedClaimsArePresent(subjectClaimsWithMetadataPrefix, credentialConfig, authResult.user(), authDetail, credentialConfigId, eventBuilder);
 
+        // OID4VCI 1.0 Appendix C.2 gives ISO mdoc paths namespace/data-element semantics. The metadata-prefixed
+        // claim map already has that namespace -> data element layout; JSON-based formats keep credentialSubject.
+        Map<String, Object> credentialSubjectClaims = VCFormat.MSO_MDOC.equals(credentialConfig.getFormat())
+                ? subjectClaimsWithMetadataPrefix
+                : subjectClaims;
+
         // Include all available claims
-        subjectClaims.forEach((key, value) -> vc.getCredentialSubject().setClaims(key, value));
+        credentialSubjectClaims.forEach((key, value) -> vc.getCredentialSubject().setClaims(key, value));
 
         protocolMappers.forEach(mapper -> mapper.setClaim(vc, authResult.session()));
 
