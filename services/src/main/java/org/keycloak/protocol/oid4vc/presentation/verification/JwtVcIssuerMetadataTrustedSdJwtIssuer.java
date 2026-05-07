@@ -31,10 +31,12 @@ import org.keycloak.jose.jwk.JSONWebKeySet;
 import org.keycloak.jose.jwk.JWK;
 import org.keycloak.jose.jws.JWSHeader;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.RealmModel;
 import org.keycloak.sdjwt.IssuerSignedJWT;
 import org.keycloak.sdjwt.consumer.HttpDataFetcher;
 import org.keycloak.sdjwt.consumer.JwtVcMetadata;
 import org.keycloak.sdjwt.consumer.TrustedSdJwtIssuer;
+import org.keycloak.services.Urls;
 import org.keycloak.util.JsonSerialization;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -60,12 +62,13 @@ class JwtVcIssuerMetadataTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
             return List.of();
         }
 
-        String issuer = OID4VPIssuerUtil.issuer(issuerSignedJWT);
-        if (OID4VPIssuerUtil.isRealmIssuer(session, issuer)) {
+        String issuer = issuer(issuerSignedJWT);
+        if (isRealmIssuer(issuer)) {
+            // The local realm issuer is verified with realm key material; metadata lookup is for remote JWT VC issuers.
             return List.of();
         }
 
-        String algorithm = OID4VPIssuerUtil.algorithm(issuerSignedJWT);
+        String algorithm = algorithm(issuerSignedJWT);
         URI issuerUri = validateIssuerUri(issuer);
         JwtVcMetadata metadata = fetchIssuerMetadata(issuerUri);
         if (!issuer.equals(metadata.getIssuer())) {
@@ -168,5 +171,34 @@ class JwtVcIssuerMetadataTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
         } catch (URISyntaxException e) {
             throw new VerificationException("Invalid issuer URI", e);
         }
+    }
+
+    private String issuer(IssuerSignedJWT issuerSignedJWT) throws VerificationException {
+        JsonNode issuerClaim = issuerSignedJWT.getPayload().get(OID4VCConstants.CLAIM_NAME_ISSUER);
+        String issuer = issuerClaim != null ? issuerClaim.asText() : null;
+        if (issuer == null || issuer.isBlank()) {
+            throw new VerificationException("Missing SD-JWT issuer claim");
+        }
+        return issuer;
+    }
+
+    private String algorithm(IssuerSignedJWT issuerSignedJWT) throws VerificationException {
+        JWSHeader header = issuerSignedJWT.getJwsHeader();
+        String algorithm = header != null && header.getAlgorithm() != null ? header.getAlgorithm().name() : null;
+        if (algorithm == null) {
+            throw new VerificationException("Missing SD-JWT issuer signature algorithm");
+        }
+        return algorithm;
+    }
+
+    private boolean isRealmIssuer(String issuer) {
+        if (session == null || session.getContext() == null || session.getContext().getRealm() == null
+                || session.getContext().getUri() == null) {
+            return false;
+        }
+
+        RealmModel realm = session.getContext().getRealm();
+        String realmIssuer = Urls.realmIssuer(session.getContext().getUri().getBaseUri(), realm.getName());
+        return realmIssuer.equals(issuer);
     }
 }

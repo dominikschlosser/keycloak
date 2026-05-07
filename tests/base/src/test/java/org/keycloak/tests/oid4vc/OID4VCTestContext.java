@@ -21,9 +21,9 @@ import org.keycloak.protocol.oid4vc.model.presentation.AuthorizationRequest;
 import org.keycloak.protocol.oid4vc.model.presentation.DirectPostResponse;
 import org.keycloak.protocol.oidc.representations.OIDCConfigurationRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.sdjwt.SdJwt;
 import org.keycloak.tests.oid4vc.abca.OIDCClientAttester;
 import org.keycloak.tests.oid4vc.presentation.OID4VPBasicWallet;
-import org.keycloak.tests.oid4vc.presentation.TestCredential;
 import org.keycloak.tests.oid4vc.presentation.TestCredentialBuilder;
 import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
 import org.keycloak.testsuite.util.oauth.oid4vc.CredentialOfferResponse;
@@ -57,8 +57,8 @@ public class OID4VCTestContext {
             new AttachmentKey<>("trustedIssuer", TestCredentialBuilder.class);
     public static final AttachmentKey<TestCredentialBuilder> CREDENTIAL_BUILDER_ATTACHMENT_KEY =
             new AttachmentKey<>("credentialBuilder", TestCredentialBuilder.class);
-    public static final AttachmentKey<TestCredential> CREDENTIAL_ATTACHMENT_KEY =
-            new AttachmentKey<>(TestCredential.class);
+    public static final AttachmentKey<SdJwt> CREDENTIAL_ATTACHMENT_KEY =
+            new AttachmentKey<>(SdJwt.class);
     public static final AttachmentKey<DirectPostResponse> DIRECT_POST_RESPONSE_ATTACHMENT_KEY =
             new AttachmentKey<>(DirectPostResponse.class);
 
@@ -249,12 +249,12 @@ public class OID4VCTestContext {
         return assertAttachment(CREDENTIAL_BUILDER_ATTACHMENT_KEY);
     }
 
-    public OID4VCTestContext withCredential(TestCredential credential) {
+    public OID4VCTestContext withCredential(SdJwt credential) {
         putAttachment(CREDENTIAL_ATTACHMENT_KEY, credential);
         return this;
     }
 
-    public TestCredential getCredential() {
+    public SdJwt getCredential() {
         return assertAttachment(CREDENTIAL_ATTACHMENT_KEY);
     }
 

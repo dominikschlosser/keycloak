@@ -15,8 +15,8 @@ import org.keycloak.common.util.Time;
 import org.keycloak.crypto.Algorithm;
 import org.keycloak.crypto.KeyUse;
 import org.keycloak.crypto.KeyWrapper;
-import org.keycloak.jose.jwk.JWK;
 import org.keycloak.jose.jwk.JSONWebKeySet;
+import org.keycloak.jose.jwk.JWK;
 import org.keycloak.jose.jwk.JWKBuilder;
 import org.keycloak.protocol.oid4vc.issuance.credentialbuilder.SdJwtCredentialBody;
 import org.keycloak.protocol.oid4vc.issuance.credentialbuilder.SdJwtCredentialBuilder;
@@ -117,7 +117,7 @@ public class TestCredentialBuilder {
         return new TestIssuerMetadata(JsonSerialization.mapper.writeValueAsString(metadata));
     }
 
-    TestCredential build(AuthorizationRequest authorizationRequest) throws Exception {
+    SdJwt build(AuthorizationRequest authorizationRequest) throws Exception {
         KeyWrapper holderKey = createHolderKey();
         SdJwtCredentialBody credentialBody = new SdJwtCredentialBuilder()
                 .buildCredentialBody(testCredential(), credentialBuildConfig());
@@ -133,19 +133,17 @@ public class TestCredentialBuilder {
 
         KeyBindingJWT keyBindingJWT = KeyBindingJWT.builder()
                 .withIat(Time.currentTime())
-                .withAudience(authorizationRequest.getResponseUri())
+                .withAudience(authorizationRequest.getClientId())
                 .withNonce(authorizationRequest.getNonce())
                 .build();
 
-        String sdJwt = SdJwt.builder()
+        return SdJwt.builder()
                 .withIssuerSignedJwt(credentialBody.getIssuerSignedJWT())
                 .withKeybindingJwt(keyBindingJWT)
                 .withIssuerSigningContext(KeyWrapperUtil.createSignatureSignerContext(issuerKey))
                 .withKeyBindingSigningContext(KeyWrapperUtil.createSignatureSignerContext(holderKey))
                 .withUseDefaultDecoys(false)
-                .build()
-                .toSdJwtString();
-        return new TestCredential(sdJwt);
+                .build();
     }
 
     private CredentialBuildConfig credentialBuildConfig() {

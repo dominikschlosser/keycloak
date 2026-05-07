@@ -42,8 +42,17 @@ class X5cTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
             return List.of();
         }
 
-        String algorithm = OID4VPIssuerUtil.algorithm(issuerSignedJWT);
+        String algorithm = algorithm(issuerSignedJWT);
         X509Certificate certificate = certificateChainValidator.validateTrustedEncodedChain(x5c);
         return List.of(certificateChainValidator.toVerifierContext(certificate, algorithm, header.getKeyId()));
+    }
+
+    private String algorithm(IssuerSignedJWT issuerSignedJWT) throws VerificationException {
+        JWSHeader header = issuerSignedJWT.getJwsHeader();
+        String algorithm = header != null && header.getAlgorithm() != null ? header.getAlgorithm().name() : null;
+        if (algorithm == null) {
+            throw new VerificationException("Missing SD-JWT issuer signature algorithm");
+        }
+        return algorithm;
     }
 }

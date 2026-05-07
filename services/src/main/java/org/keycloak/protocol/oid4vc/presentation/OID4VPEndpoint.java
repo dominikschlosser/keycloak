@@ -33,12 +33,6 @@ import jakarta.ws.rs.core.Response;
 import org.keycloak.VCFormat;
 import org.keycloak.broker.provider.BrokeredIdentityContext;
 import org.keycloak.broker.provider.UserAuthenticationIdentityProvider.AuthenticationCallback;
-import org.keycloak.crypto.KeyUse;
-import org.keycloak.crypto.KeyWrapper;
-import org.keycloak.crypto.SignatureProvider;
-import org.keycloak.crypto.SignatureSignerContext;
-import org.keycloak.jose.jws.JWSBuilder;
-import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.protocol.oid4vc.model.presentation.AuthorizationRequest;
@@ -86,13 +80,12 @@ public class OID4VPEndpoint {
         session.getContext().setAuthenticationSession(authSession);
 
         String responseUri = provider.getVerifierEndpoint(realm);
+        String clientId = Optional.ofNullable(handleReference.getClientId())
+                .orElseGet(() -> provider.resolveClientIdentifier(responseUri).getValue());
 
         AuthorizationRequest authorizationRequest = provider.createAuthorizationRequest(
-                realm, responseUri, handleReference.getState(), responseUri, handleReference.getNonce());
-        String requestObject = new JWSBuilder()
-                .type(OID4VPConstants.REQUEST_OBJECT_TYPE)
-                .jsonContent(authorizationRequest)
-                .sign(getSignatureSigner());
+                clientId, handleReference.getState(), responseUri, handleReference.getNonce());
+        String requestObject = RequestObjectSigner.fromConfig(provider.getConfig()).sign(authorizationRequest);
         return Response.ok(requestObject).type(OID4VPConstants.MEDIA_TYPE_AUTHORIZATION_REQUEST_JWT).build();
     }
 
@@ -116,7 +109,7 @@ public class OID4VPEndpoint {
             try {
                 verificationResult = verifyVpToken(
                         directPostRequest.getVpToken(),
-                        provider.getVerifierEndpoint(realm),
+                        Optional.ofNullable(stateReference.getClientId()).orElseGet(() -> provider.getVerifierEndpoint(realm)),
                         stateReference.getNonce());
             } catch (CredentialVerificationException e) {
                 return Response.status(Response.Status.BAD_REQUEST).build();
@@ -262,30 +255,6 @@ public class OID4VPEndpoint {
     private String stringClaim(CredentialVerificationResult verificationResult, String claimName) {
         Object value = verificationResult.getClaims().get(claimName);
         return value instanceof String string ? string : null;
-    }
-
-    private SignatureSignerContext getSignatureSigner() {
-        String algorithm = realm.getDefaultSignatureAlgorithm();
-        if (algorithm == null || algorithm.isBlank()) {
-            algorithm = Constants.DEFAULT_SIGNATURE_ALGORITHM;
-        }
-
-        KeyWrapper signingKey = session.keys().getActiveKey(realm, KeyUse.SIG, algorithm);
-        if (signingKey == null) {
-            throw new IllegalStateException("No active realm signing key available for OID4VP request objects using algorithm " + algorithm);
-        }
-
-        SignatureProvider signatureProvider = session.getProvider(SignatureProvider.class, algorithm);
-        if (signatureProvider == null) {
-            throw new IllegalStateException("No signature provider available for OID4VP request object algorithm " + algorithm);
-        }
-
-        SignatureSignerContext signer = signatureProvider.signer(signingKey);
-        if (signer == null) {
-            throw new IllegalStateException("No signer available for OID4VP request object algorithm " + algorithm);
-        }
-
-        return signer;
     }
 
     private <T> T readStored(String key, Class<T> type) {

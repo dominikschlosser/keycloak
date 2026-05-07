@@ -26,6 +26,15 @@ public final class OID4VPConstants {
     public static final String RESPONSE_MODE_DIRECT_POST = "direct_post";
     public static final String DEFAULT_WALLET_SCHEME = "openid4vp://";
 
+    public static final String CLIENT_ID = "client_id";
+    public static final String REQUEST_URI = "request_uri";
+    public static final String RESPONSE_TYPE = "response_type";
+    public static final String RESPONSE_MODE = "response_mode";
+    public static final String RESPONSE_URI = "response_uri";
+    public static final String NONCE = "nonce";
+    public static final String DCQL_QUERY = "dcql_query";
+    public static final String CLIENT_METADATA = "client_metadata";
+
     public static final String VP_TOKEN = "vp_token";
     public static final String ID_TOKEN = "id_token";
     public static final String STATE = "state";

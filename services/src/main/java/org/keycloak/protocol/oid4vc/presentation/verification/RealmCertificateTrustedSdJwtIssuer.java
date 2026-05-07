@@ -20,18 +20,21 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.keycloak.OID4VCConstants;
 import org.keycloak.common.VerificationException;
 import org.keycloak.crypto.KeyUse;
 import org.keycloak.crypto.KeyWrapper;
 import org.keycloak.crypto.SignatureVerifierContext;
 import org.keycloak.jose.jws.JWSHeader;
-import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeyManager;
+import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.sdjwt.IssuerSignedJWT;
 import org.keycloak.sdjwt.consumer.TrustedSdJwtIssuer;
 import org.keycloak.services.Urls;
 import org.keycloak.util.KeyWrapperUtil;
+
+import com.fasterxml.jackson.databind.JsonNode;
 
 class RealmCertificateTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
 
@@ -58,11 +61,11 @@ class RealmCertificateTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
     @Override
     public List<SignatureVerifierContext> resolveIssuerVerifyingKeys(IssuerSignedJWT issuerSignedJWT)
             throws VerificationException {
-        if (!realmIssuer.equals(OID4VPIssuerUtil.issuer(issuerSignedJWT))) {
+        if (!realmIssuer.equals(issuer(issuerSignedJWT))) {
             return List.of();
         }
 
-        String algorithm = OID4VPIssuerUtil.algorithm(issuerSignedJWT);
+        String algorithm = algorithm(issuerSignedJWT);
         JWSHeader header = issuerSignedJWT.getJwsHeader();
         String kid = header != null ? header.getKeyId() : null;
         if (kid != null) {
@@ -106,5 +109,23 @@ class RealmCertificateTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
             return List.of(key.getCertificate());
         }
         return List.of();
+    }
+
+    private String issuer(IssuerSignedJWT issuerSignedJWT) throws VerificationException {
+        JsonNode issuerClaim = issuerSignedJWT.getPayload().get(OID4VCConstants.CLAIM_NAME_ISSUER);
+        String issuer = issuerClaim != null ? issuerClaim.asText() : null;
+        if (issuer == null || issuer.isBlank()) {
+            throw new VerificationException("Missing SD-JWT issuer claim");
+        }
+        return issuer;
+    }
+
+    private String algorithm(IssuerSignedJWT issuerSignedJWT) throws VerificationException {
+        JWSHeader header = issuerSignedJWT.getJwsHeader();
+        String algorithm = header != null && header.getAlgorithm() != null ? header.getAlgorithm().name() : null;
+        if (algorithm == null) {
+            throw new VerificationException("Missing SD-JWT issuer signature algorithm");
+        }
+        return algorithm;
     }
 }

@@ -17,11 +17,17 @@
 package org.keycloak.protocol.oid4vc.presentation;
 
 import org.keycloak.models.IdentityProviderModel;
+import org.keycloak.models.RealmModel;
 
 public class OID4VPIdentityProviderConfig extends IdentityProviderModel {
 
     public static final String REQUEST_OBJECT_LIFESPAN = "requestObjectLifespan";
     public static final String WALLET_SCHEME = "walletScheme";
+    public static final String AUTHORIZATION_REQUEST_TRANSPORT = "authorizationRequestTransport";
+    public static final String CLIENT_IDENTIFIER_PREFIX = "clientIdentifierPrefix";
+    public static final String X509_SAN_DNS_NAME = "x509SanDnsName";
+    public static final String X509_CERTIFICATE_PEM = "x509CertificatePem";
+    public static final String X509_PRIVATE_KEY_PEM = "x509PrivateKeyPem";
     public static final String SUBJECT_CLAIM_NAME = "subjectClaimName";
     public static final String TRUSTED_ISSUER_CERTIFICATE = "trustedIssuerCertificate";
     public static final String DCQL_QUERY = "dcqlQuery";
@@ -52,6 +58,53 @@ public class OID4VPIdentityProviderConfig extends IdentityProviderModel {
     public String getWalletScheme() {
         String configured = getConfig().get(WALLET_SCHEME);
         return configured == null || configured.isBlank() ? OID4VPConstants.DEFAULT_WALLET_SCHEME : configured;
+    }
+
+    public AuthorizationRequestTransport getAuthorizationRequestTransport() {
+        return AuthorizationRequestTransport.fromConfig(this);
+    }
+
+    public ClientIdentifierPrefix getClientIdentifierPrefix() {
+        return ClientIdentifierPrefix.fromConfig(this);
+    }
+
+    @Override
+    public void validate(RealmModel realm) {
+        super.validate(realm);
+        validateAuthorizationRequestSettings();
+    }
+
+    private void validateAuthorizationRequestSettings() {
+        AuthorizationRequestTransport transport = getAuthorizationRequestTransport();
+        ClientIdentifierPrefix prefix = getClientIdentifierPrefix();
+        if (prefix == ClientIdentifierPrefix.REDIRECT_URI && transport != AuthorizationRequestTransport.QUERY_PARAMETERS) {
+            throw new IllegalArgumentException("The redirect_uri Client Identifier Prefix cannot be used with signed request objects");
+        }
+        if ((prefix == ClientIdentifierPrefix.X509_SAN_DNS || prefix == ClientIdentifierPrefix.X509_HASH)
+                && transport != AuthorizationRequestTransport.REQUEST_URI) {
+            throw new IllegalArgumentException("Certificate-bound OID4VP Client Identifier Prefixes require a signed request object");
+        }
+    }
+
+    public String getX509SanDnsName() {
+        String configured = getConfig().get(X509_SAN_DNS_NAME);
+        return configured == null || configured.isBlank() ? null : configured;
+    }
+
+    public String getX509CertificatePem() {
+        return getConfig().get(X509_CERTIFICATE_PEM);
+    }
+
+    public void setX509CertificatePem(String pem) {
+        getConfig().put(X509_CERTIFICATE_PEM, pem);
+    }
+
+    public String getX509PrivateKeyPem() {
+        return getConfig().get(X509_PRIVATE_KEY_PEM);
+    }
+
+    public void setX509PrivateKeyPem(String pem) {
+        getConfig().put(X509_PRIVATE_KEY_PEM, pem);
     }
 
     public String getSubjectClaimName() {

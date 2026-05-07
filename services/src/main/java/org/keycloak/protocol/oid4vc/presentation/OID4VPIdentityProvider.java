@@ -18,8 +18,8 @@ package org.keycloak.protocol.oid4vc.presentation;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,6 +28,7 @@ import jakarta.ws.rs.core.Response;
 
 import org.keycloak.broker.provider.AbstractIdentityProvider;
 import org.keycloak.broker.provider.AuthenticationRequest;
+import org.keycloak.common.util.KeycloakUriBuilder;
 import org.keycloak.common.util.Time;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.models.FederatedIdentityModel;
@@ -40,7 +41,6 @@ import org.keycloak.protocol.oid4vc.model.presentation.DcqlClaimQuery;
 import org.keycloak.protocol.oid4vc.model.presentation.DcqlCredentialMeta;
 import org.keycloak.protocol.oid4vc.model.presentation.DcqlCredentialQuery;
 import org.keycloak.protocol.oid4vc.model.presentation.DcqlQuery;
-import org.keycloak.services.Urls;
 import org.keycloak.util.JsonSerialization;
 
 public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdentityProviderConfig> {
@@ -57,8 +57,10 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
 
     @Override
     public Response performLogin(AuthenticationRequest request) {
-        String requestHandle = UUID.randomUUID().toString();
         int lifespan = getConfig().getRequestObjectLifespan();
+        RealmModel realm = request.getRealm();
+        String verifierEndpoint = getVerifierEndpoint(realm);
+        ClientIdentifier clientIdentifier = resolveClientIdentifier(verifierEndpoint);
         String rootSessionId = request.getAuthenticationSession().getParentSession() != null
                 ? request.getAuthenticationSession().getParentSession().getId()
                 : null;
@@ -66,26 +68,28 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
         OID4VPRequestHandleReference handleReference = new OID4VPRequestHandleReference()
                 .setState(request.getState().getEncoded())
                 .setNonce(nonce)
+                .setClientId(clientIdentifier.getValue())
                 .setRootSessionId(rootSessionId)
                 .setTabId(request.getAuthenticationSession().getTabId());
-        // The request handle must remain dereferenceable for repeated request_uri fetches,
-        // while the state entry is used later to correlate and consume the direct_post callback.
-        session.singleUseObjects().put(
-                REQUEST_HANDLE_PREFIX + requestHandle,
-                lifespan,
-                Map.of(ENTRY_JSON, JsonSerialization.valueAsString(handleReference)));
         session.singleUseObjects().put(
                 STATE_REFERENCE_PREFIX + request.getState().getEncoded(),
                 lifespan,
                 Map.of(ENTRY_JSON, JsonSerialization.valueAsString(handleReference)));
 
-        String verifierEndpoint = getVerifierEndpoint(request.getRealm());
-        URI requestUri = URI.create(verifierEndpoint + "/request-object/" + requestHandle);
-        String clientId = urlEncode(verifierEndpoint);
-        String encodedRequestUri = urlEncode(requestUri.toString());
-        URI walletUri = URI.create(getConfig().getWalletScheme()
-                + "?client_id=" + clientId
-                + "&request_uri=" + encodedRequestUri);
+        URI walletUri = switch (getConfig().getAuthorizationRequestTransport()) {
+            case REQUEST_URI -> {
+                String requestHandle = UUID.randomUUID().toString();
+                URI requestUri = URI.create(verifierEndpoint + "/request-object/" + requestHandle);
+                // The request handle must remain dereferenceable for repeated request_uri fetches.
+                session.singleUseObjects().put(
+                        REQUEST_HANDLE_PREFIX + requestHandle,
+                        lifespan,
+                        Map.of(ENTRY_JSON, JsonSerialization.valueAsString(handleReference)));
+                yield createRequestUriWalletUri(clientIdentifier, requestUri);
+            }
+            case QUERY_PARAMETERS -> createQueryParameterWalletUri(
+                    clientIdentifier.getValue(), request.getState().getEncoded(), verifierEndpoint, nonce);
+        };
         return Response.seeOther(walletUri).build();
     }
 
@@ -104,11 +108,11 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
         return exchangeNotSupported();
     }
 
-    AuthorizationRequest createAuthorizationRequest(RealmModel realm, String clientId, String state, String responseUri, String nonce) {
+    AuthorizationRequest createAuthorizationRequest(String clientId, String state, String responseUri, String nonce) {
         int now = Time.currentTime();
         return new AuthorizationRequest()
                 .setJti(UUID.randomUUID().toString())
-                .setIssuer(Urls.realmIssuer(session.getContext().getUri().getBaseUri(), realm.getName()))
+                .setIssuer(clientId)
                 .setAudience(OID4VPConstants.AUD_SELF_ISSUED_V2)
                 .setIssuedAt((long) now)
                 .setExpiration((long) now + getConfig().getRequestObjectLifespan())
@@ -118,7 +122,56 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
                 .setResponseUri(responseUri)
                 .setState(state)
                 .setNonce(nonce)
-                .setDcqlQuery(createDcqlQuery());
+                .setDcqlQuery(createDcqlQuery())
+                .setClientMetadata(createClientMetadata());
+    }
+
+    ClientIdentifier resolveClientIdentifier(String responseUri) {
+        ClientIdentifierPrefix clientIdentifierPrefix = getConfig().getClientIdentifierPrefix();
+        X509Certificate certificate = clientIdentifierPrefix == ClientIdentifierPrefix.X509_HASH
+                || clientIdentifierPrefix == ClientIdentifierPrefix.X509_SAN_DNS
+                ? RequestObjectSigner.parseCertificate(getConfig().getX509CertificatePem())
+                : null;
+        return ClientIdentifier.resolve(
+                clientIdentifierPrefix,
+                responseUri,
+                certificate,
+                getConfig().getX509SanDnsName());
+    }
+
+    private URI createRequestUriWalletUri(ClientIdentifier clientIdentifier, URI requestUri) {
+        Map<String, String> queryParams = new LinkedHashMap<>();
+        queryParams.put(OID4VPConstants.CLIENT_ID, clientIdentifier.getValue());
+        queryParams.put(OID4VPConstants.REQUEST_URI, requestUri.toString());
+        return createWalletUri(queryParams);
+    }
+
+    URI createQueryParameterWalletUri(String clientId, String state, String responseUri, String nonce) {
+        Map<String, String> queryParams = new LinkedHashMap<>();
+        queryParams.put(OID4VPConstants.CLIENT_ID, clientId);
+        queryParams.put(OID4VPConstants.RESPONSE_TYPE, OID4VPConstants.RESPONSE_TYPE_VP_TOKEN);
+        queryParams.put(OID4VPConstants.RESPONSE_MODE, OID4VPConstants.RESPONSE_MODE_DIRECT_POST);
+        queryParams.put(OID4VPConstants.RESPONSE_URI, responseUri);
+        queryParams.put(OID4VPConstants.STATE, state);
+        queryParams.put(OID4VPConstants.NONCE, nonce);
+        queryParams.put(OID4VPConstants.DCQL_QUERY, JsonSerialization.valueAsString(createDcqlQuery()));
+        queryParams.put(OID4VPConstants.CLIENT_METADATA, JsonSerialization.valueAsString(createClientMetadata()));
+        return createWalletUri(queryParams);
+    }
+
+    private URI createWalletUri(Map<String, String> queryParams) {
+        KeycloakUriBuilder uri = KeycloakUriBuilder.fromUri(getConfig().getWalletScheme());
+        queryParams.forEach(uri::queryParam);
+        return uri.build();
+    }
+
+    private Map<String, Object> createClientMetadata() {
+        // TODO: Build OID4VP client metadata from provider configuration instead of these minimal defaults.
+        return Map.of(
+                "vp_formats_supported", Map.of(
+                        "dc+sd-jwt", Map.of(
+                                "sd-jwt_alg_values", List.of("ES256"),
+                                "kb-jwt_alg_values", List.of("ES256"))));
     }
 
     String getVerifierEndpoint(RealmModel realm) {
@@ -171,14 +224,11 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
         return prefix + value;
     }
 
-    private String urlEncode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
     static class OID4VPRequestHandleReference {
 
         private String state;
         private String nonce;
+        private String clientId;
         private String rootSessionId;
         private String tabId;
 
@@ -197,6 +247,15 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
 
         public OID4VPRequestHandleReference setNonce(String nonce) {
             this.nonce = nonce;
+            return this;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
+
+        public OID4VPRequestHandleReference setClientId(String clientId) {
+            this.clientId = clientId;
             return this;
         }
 
