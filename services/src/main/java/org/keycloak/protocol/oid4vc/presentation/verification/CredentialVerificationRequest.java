@@ -21,11 +21,18 @@ public class CredentialVerificationRequest {
     private final String credential;
     private final String expectedAudience;
     private final String expectedNonce;
+    private final String trustedIssuerCertificate;
 
     public CredentialVerificationRequest(String credential, String expectedAudience, String expectedNonce) {
+        this(credential, expectedAudience, expectedNonce, null);
+    }
+
+    public CredentialVerificationRequest(String credential, String expectedAudience, String expectedNonce,
+                                         String trustedIssuerCertificate) {
         this.credential = credential;
         this.expectedAudience = expectedAudience;
         this.expectedNonce = expectedNonce;
+        this.trustedIssuerCertificate = trustedIssuerCertificate;
     }
 
     public String getCredential() {
@@ -38,5 +45,9 @@ public class CredentialVerificationRequest {
 
     public String getExpectedNonce() {
         return expectedNonce;
+    }
+
+    public String getTrustedIssuerCertificate() {
+        return trustedIssuerCertificate;
     }
 }

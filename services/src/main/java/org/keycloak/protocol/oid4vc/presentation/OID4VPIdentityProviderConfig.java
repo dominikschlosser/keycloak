@@ -23,6 +23,8 @@ public class OID4VPIdentityProviderConfig extends IdentityProviderModel {
     public static final String REQUEST_OBJECT_LIFESPAN = "requestObjectLifespan";
     public static final String WALLET_SCHEME = "walletScheme";
     public static final String SUBJECT_CLAIM_NAME = "subjectClaimName";
+    public static final String TRUSTED_ISSUER_CERTIFICATE = "trustedIssuerCertificate";
+    public static final String DCQL_QUERY = "dcqlQuery";
     public static final int DEFAULT_REQUEST_OBJECT_LIFESPAN = 300;
     public static final String DEFAULT_SUBJECT_CLAIM_NAME = "sub";
 
@@ -55,5 +57,15 @@ public class OID4VPIdentityProviderConfig extends IdentityProviderModel {
     public String getSubjectClaimName() {
         String configured = getConfig().get(SUBJECT_CLAIM_NAME);
         return configured == null || configured.isBlank() ? DEFAULT_SUBJECT_CLAIM_NAME : configured;
+    }
+
+    public String getTrustedIssuerCertificate() {
+        String configured = getConfig().get(TRUSTED_ISSUER_CERTIFICATE);
+        return configured == null || configured.isBlank() ? null : configured;
+    }
+
+    public String getDcqlQuery() {
+        String configured = getConfig().get(DCQL_QUERY);
+        return configured == null || configured.isBlank() ? null : configured;
     }
 }
