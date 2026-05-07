@@ -16,6 +16,8 @@
  */
 package org.keycloak.protocol.oid4vc.model.presentation;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -59,6 +61,9 @@ public class AuthorizationRequest {
 
     @JsonProperty("dcql_query")
     private DcqlQuery dcqlQuery;
+
+    @JsonProperty("client_metadata")
+    private Map<String, Object> clientMetadata;
 
     public String getJti() {
         return jti;
@@ -165,6 +170,15 @@ public class AuthorizationRequest {
 
     public AuthorizationRequest setDcqlQuery(DcqlQuery dcqlQuery) {
         this.dcqlQuery = dcqlQuery;
+        return this;
+    }
+
+    public Map<String, Object> getClientMetadata() {
+        return clientMetadata;
+    }
+
+    public AuthorizationRequest setClientMetadata(Map<String, Object> clientMetadata) {
+        this.clientMetadata = clientMetadata;
         return this;
     }
 }

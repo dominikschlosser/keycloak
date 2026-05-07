@@ -34,8 +34,8 @@ import org.keycloak.common.util.CertificateUtils;
 import org.keycloak.common.util.PemUtils;
 import org.keycloak.crypto.KeyUse;
 import org.keycloak.crypto.KeyWrapper;
-import org.keycloak.jose.jwk.JWK;
 import org.keycloak.jose.jwk.JSONWebKeySet;
+import org.keycloak.jose.jwk.JWK;
 import org.keycloak.jose.jwk.JWKBuilder;
 import org.keycloak.jose.jws.Algorithm;
 import org.keycloak.jose.jws.JWSHeader;
@@ -50,6 +50,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.keycloak.crypto.Algorithm.RS256;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 

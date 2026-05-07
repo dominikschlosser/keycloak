@@ -22,6 +22,7 @@ import org.keycloak.OID4VCConstants;
 import org.keycloak.VCFormat;
 import org.keycloak.common.VerificationException;
 import org.keycloak.common.util.Environment;
+import org.keycloak.http.simple.SimpleHttp;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.sdjwt.IssuerSignedJwtVerificationOpts;
 import org.keycloak.sdjwt.VerifiedSdJwt;
@@ -120,7 +121,7 @@ public class SdJwtCredentialVerifier implements CredentialVerifier {
                 new JwtVcIssuerMetadataTrustedSdJwtIssuer(
                         session,
                         request.getTrustedIssuerCertificate(),
-                        OID4VPIssuerUtil.httpDataFetcher(session),
+                        uri -> SimpleHttp.create(session).doGet(uri).acceptJson().asJson(),
                         allowSelfSigned));
     }
 }

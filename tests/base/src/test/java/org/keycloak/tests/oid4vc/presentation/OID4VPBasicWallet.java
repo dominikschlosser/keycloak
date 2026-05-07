@@ -2,6 +2,7 @@ package org.keycloak.tests.oid4vc.presentation;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import jakarta.ws.rs.core.HttpHeaders;
@@ -11,6 +12,7 @@ import org.keycloak.http.simple.SimpleHttpRequest;
 import org.keycloak.http.simple.SimpleHttpResponse;
 import org.keycloak.jose.jws.JWSInput;
 import org.keycloak.protocol.oid4vc.model.presentation.AuthorizationRequest;
+import org.keycloak.protocol.oid4vc.model.presentation.DcqlQuery;
 import org.keycloak.protocol.oid4vc.model.presentation.DirectPostResponse;
 import org.keycloak.protocol.oid4vc.presentation.OID4VPConstants;
 import org.keycloak.testframework.oauth.OAuthClient;
@@ -20,6 +22,7 @@ import org.keycloak.tests.oid4vc.OID4VCTestContext;
 import org.keycloak.testsuite.util.oauth.AuthorizationEndpointResponse;
 import org.keycloak.util.JsonSerialization;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.openqa.selenium.By;
@@ -94,14 +97,20 @@ public class OID4VPBasicWallet {
             }
 
             String walletUrl = brokerLoginResponse.getFirstHeader(HttpHeaders.LOCATION);
+            Map<String, String> queryParams = getQueryParams(walletUrl);
             return new WalletAuthorizationRequest()
                     .setWalletUrl(walletUrl)
-                    .setClientId(getQueryParam(walletUrl, "client_id"))
-                    .setRequestUri(getQueryParam(walletUrl, "request_uri"));
+                    .setQueryParams(queryParams)
+                    .setClientId(queryParams.get(OID4VPConstants.CLIENT_ID))
+                    .setRequestUri(queryParams.get(OID4VPConstants.REQUEST_URI));
         }
     }
 
     private AuthorizationRequest fetchAuthorizationRequest(WalletAuthorizationRequest walletRequest) throws Exception {
+        if (walletRequest.getRequestUri() == null) {
+            return authorizationRequestFromQueryParameters(walletRequest);
+        }
+
         try (SimpleHttpResponse requestObjectResponse = redirectlessHttp.doGet(walletRequest.getRequestUri()).asResponse()) {
             if (requestObjectResponse.getStatus() != 200) {
                 throw new IllegalStateException("Unexpected request object status: " + requestObjectResponse.getStatus());
@@ -110,6 +119,22 @@ public class OID4VPBasicWallet {
             byte[] requestObjectContent = new JWSInput(requestObjectResponse.asString()).getContent();
             return JsonSerialization.readValue(requestObjectContent, AuthorizationRequest.class);
         }
+    }
+
+    private AuthorizationRequest authorizationRequestFromQueryParameters(WalletAuthorizationRequest walletRequest) throws Exception {
+        Map<String, String> queryParams = walletRequest.getQueryParams();
+        return new AuthorizationRequest()
+                .setClientId(queryParams.get(OID4VPConstants.CLIENT_ID))
+                .setResponseType(queryParams.get(OID4VPConstants.RESPONSE_TYPE))
+                .setResponseMode(queryParams.get(OID4VPConstants.RESPONSE_MODE))
+                .setResponseUri(queryParams.get(OID4VPConstants.RESPONSE_URI))
+                .setState(queryParams.get(OID4VPConstants.STATE))
+                .setNonce(queryParams.get(OID4VPConstants.NONCE))
+                .setDcqlQuery(JsonSerialization.readValue(queryParams.get(OID4VPConstants.DCQL_QUERY), DcqlQuery.class))
+                .setClientMetadata(JsonSerialization.readValue(
+                        queryParams.get(OID4VPConstants.CLIENT_METADATA),
+                        new TypeReference<Map<String, Object>>() {
+                        }));
     }
 
     private SimpleHttpResponse submitDirectPostResponse(AuthorizationRequest authorizationRequest, TestVpToken vpToken) throws Exception {
@@ -142,12 +167,11 @@ public class OID4VPBasicWallet {
         return request;
     }
 
-    private String getQueryParam(String uri, String name) {
+    private Map<String, String> getQueryParams(String uri) {
         return URLEncodedUtils.parse(URI.create(uri), StandardCharsets.UTF_8).stream()
-                .filter(param -> name.equals(param.getName()))
-                .map(param -> param.getValue())
-                .findFirst()
-                .orElse(null);
+                .collect(Collectors.toMap(
+                        param -> param.getName(),
+                        param -> param.getValue()));
     }
 
     private String browserCookies() {
@@ -193,6 +217,7 @@ public class OID4VPBasicWallet {
         private String walletUrl;
         private String clientId;
         private String requestUri;
+        private Map<String, String> queryParams = Map.of();
 
         public String getWalletUrl() {
             return walletUrl;
@@ -218,6 +243,15 @@ public class OID4VPBasicWallet {
 
         public WalletAuthorizationRequest setRequestUri(String requestUri) {
             this.requestUri = requestUri;
+            return this;
+        }
+
+        public Map<String, String> getQueryParams() {
+            return queryParams;
+        }
+
+        public WalletAuthorizationRequest setQueryParams(Map<String, String> queryParams) {
+            this.queryParams = queryParams;
             return this;
         }
     }

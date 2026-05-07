@@ -49,6 +49,45 @@ public class OID4VPIdentityProviderFactory extends AbstractIdentityProviderFacto
         walletScheme.setType(ProviderConfigProperty.STRING_TYPE);
         walletScheme.setDefaultValue(OID4VPConstants.DEFAULT_WALLET_SCHEME);
 
+        ProviderConfigProperty authorizationRequestTransport = new ProviderConfigProperty();
+        authorizationRequestTransport.setName(OID4VPIdentityProviderConfig.AUTHORIZATION_REQUEST_TRANSPORT);
+        authorizationRequestTransport.setLabel("Authorization Request Transport");
+        authorizationRequestTransport.setHelpText("How the OID4VP authorization request is delivered to the wallet.");
+        authorizationRequestTransport.setType(ProviderConfigProperty.LIST_TYPE);
+        authorizationRequestTransport.setOptions(List.of(
+                AuthorizationRequestTransport.QUERY_PARAMETERS.getValue(),
+                AuthorizationRequestTransport.REQUEST_URI.getValue()));
+        authorizationRequestTransport.setDefaultValue(AuthorizationRequestTransport.QUERY_PARAMETERS.getValue());
+
+        ProviderConfigProperty clientIdentifierPrefix = new ProviderConfigProperty();
+        clientIdentifierPrefix.setName(OID4VPIdentityProviderConfig.CLIENT_IDENTIFIER_PREFIX);
+        clientIdentifierPrefix.setLabel("Client Identifier Prefix");
+        clientIdentifierPrefix.setHelpText("OID4VP verifier Client Identifier Prefix.");
+        clientIdentifierPrefix.setType(ProviderConfigProperty.LIST_TYPE);
+        clientIdentifierPrefix.setOptions(List.of(
+                ClientIdentifierPrefix.REDIRECT_URI.getValue(),
+                ClientIdentifierPrefix.X509_SAN_DNS.getValue(),
+                ClientIdentifierPrefix.X509_HASH.getValue()));
+        clientIdentifierPrefix.setDefaultValue(ClientIdentifierPrefix.REDIRECT_URI.getValue());
+
+        ProviderConfigProperty x509SanDnsName = new ProviderConfigProperty();
+        x509SanDnsName.setName(OID4VPIdentityProviderConfig.X509_SAN_DNS_NAME);
+        x509SanDnsName.setLabel("X.509 SAN DNS Name");
+        x509SanDnsName.setHelpText("DNS name used for x509_san_dns client identifiers.");
+        x509SanDnsName.setType(ProviderConfigProperty.STRING_TYPE);
+
+        ProviderConfigProperty x509CertificatePem = new ProviderConfigProperty();
+        x509CertificatePem.setName(OID4VPIdentityProviderConfig.X509_CERTIFICATE_PEM);
+        x509CertificatePem.setLabel("X.509 Certificate (PEM)");
+        x509CertificatePem.setHelpText("PEM encoded verifier certificate used for certificate-bound client IDs and request object x5c.");
+        x509CertificatePem.setType(ProviderConfigProperty.TEXT_TYPE);
+
+        ProviderConfigProperty x509PrivateKeyPem = new ProviderConfigProperty();
+        x509PrivateKeyPem.setName(OID4VPIdentityProviderConfig.X509_PRIVATE_KEY_PEM);
+        x509PrivateKeyPem.setLabel("X.509 Private Key (PEM)");
+        x509PrivateKeyPem.setHelpText("PEM encoded verifier private key used for OID4VP request object signing.");
+        x509PrivateKeyPem.setType(ProviderConfigProperty.TEXT_TYPE);
+
         ProviderConfigProperty requestObjectLifespan = new ProviderConfigProperty();
         requestObjectLifespan.setName(OID4VPIdentityProviderConfig.REQUEST_OBJECT_LIFESPAN);
         requestObjectLifespan.setLabel("Request Object Lifespan");
@@ -75,7 +114,17 @@ public class OID4VPIdentityProviderFactory extends AbstractIdentityProviderFacto
         dcqlQuery.setHelpText("DCQL query JSON used in generated OID4VP authorization requests.");
         dcqlQuery.setType(ProviderConfigProperty.TEXT_TYPE);
 
-        return List.of(walletScheme, requestObjectLifespan, subjectClaimName, trustedIssuerCertificate, dcqlQuery);
+        return List.of(
+                walletScheme,
+                authorizationRequestTransport,
+                clientIdentifierPrefix,
+                x509SanDnsName,
+                x509CertificatePem,
+                x509PrivateKeyPem,
+                requestObjectLifespan,
+                subjectClaimName,
+                trustedIssuerCertificate,
+                dcqlQuery);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package org.keycloak.tests.oid4vc.presentation;
 
 import org.keycloak.protocol.oid4vc.model.presentation.AuthorizationRequest;
+import org.keycloak.sdjwt.SdJwt;
 
 class TestVpToken {
 
@@ -13,8 +14,8 @@ class TestVpToken {
         this.value = value;
     }
 
-    static TestVpToken forCredential(AuthorizationRequest authorizationRequest, TestCredential credential) {
-        return forPresentation(authorizationRequest, credential.sdJwt());
+    static TestVpToken forCredential(AuthorizationRequest authorizationRequest, SdJwt credential) {
+        return forPresentation(authorizationRequest, credential.toSdJwtString());
     }
 
     static TestVpToken unverifiablePresentation(AuthorizationRequest authorizationRequest) {
