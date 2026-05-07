@@ -16,6 +16,7 @@ import org.keycloak.protocol.oid4vc.presentation.OID4VPConstants;
 import org.keycloak.testframework.oauth.OAuthClient;
 import org.keycloak.testframework.ui.page.LoginPage;
 import org.keycloak.testframework.ui.webdriver.ManagedWebDriver;
+import org.keycloak.tests.oid4vc.OID4VCTestContext;
 import org.keycloak.testsuite.util.oauth.AuthorizationEndpointResponse;
 import org.keycloak.util.JsonSerialization;
 
@@ -25,6 +26,10 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.Cookie;
 import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.WebElement;
+
+import static org.keycloak.tests.oid4vc.OID4VCTestContext.AUTHORIZATION_REQUEST_ATTACHMENT_KEY;
+import static org.keycloak.tests.oid4vc.OID4VCTestContext.DIRECT_POST_RESPONSE_ATTACHMENT_KEY;
+import static org.keycloak.tests.oid4vc.OID4VCTestContext.WALLET_AUTHORIZATION_REQUEST_ATTACHMENT_KEY;
 
 public class OID4VPBasicWallet {
 
@@ -41,7 +46,40 @@ public class OID4VPBasicWallet {
         this.driver = driver;
     }
 
-    public WalletAuthorizationRequest browserAuthorizationRequest(String idpAlias) throws Exception {
+    public WalletAuthorizationRequest browserAuthorizationRequest(OID4VCTestContext ctx, String idpAlias) throws Exception {
+        WalletAuthorizationRequest walletRequest = browserAuthorizationRequest(idpAlias);
+        ctx.putAttachment(WALLET_AUTHORIZATION_REQUEST_ATTACHMENT_KEY, walletRequest);
+        return walletRequest;
+    }
+
+    public AuthorizationRequest fetchAuthorizationRequest(OID4VCTestContext ctx) throws Exception {
+        AuthorizationRequest authorizationRequest = fetchAuthorizationRequest(
+                ctx.assertAttachment(WALLET_AUTHORIZATION_REQUEST_ATTACHMENT_KEY));
+        ctx.putAttachment(AUTHORIZATION_REQUEST_ATTACHMENT_KEY, authorizationRequest);
+        return authorizationRequest;
+    }
+
+    public DirectPostResponse submitDirectPost(OID4VCTestContext ctx, TestVpToken vpToken) throws Exception {
+        try (SimpleHttpResponse response = submitDirectPostResponse(ctx.getAuthorizationRequest(), vpToken)) {
+            int status = response.getStatus();
+            String body = response.asString();
+            if (status != 200) {
+                throw new IllegalStateException("Unexpected direct_post status: " + status + ", body: " + body);
+            }
+
+            DirectPostResponse directPostResponse = JsonSerialization.readValue(body, DirectPostResponse.class);
+            ctx.putAttachment(DIRECT_POST_RESPONSE_ATTACHMENT_KEY, directPostResponse);
+            return directPostResponse;
+        }
+    }
+
+    public int submitDirectPostStatus(OID4VCTestContext ctx, TestVpToken vpToken) throws Exception {
+        try (SimpleHttpResponse response = submitDirectPostResponse(ctx.getAuthorizationRequest(), vpToken)) {
+            return response.getStatus();
+        }
+    }
+
+    private WalletAuthorizationRequest browserAuthorizationRequest(String idpAlias) throws Exception {
         requireBrowser();
         oauth.openLoginForm();
 
@@ -63,7 +101,7 @@ public class OID4VPBasicWallet {
         }
     }
 
-    public AuthorizationRequest fetchAuthorizationRequest(WalletAuthorizationRequest walletRequest) throws Exception {
+    private AuthorizationRequest fetchAuthorizationRequest(WalletAuthorizationRequest walletRequest) throws Exception {
         try (SimpleHttpResponse requestObjectResponse = redirectlessHttp.doGet(walletRequest.getRequestUri()).asResponse()) {
             if (requestObjectResponse.getStatus() != 200) {
                 throw new IllegalStateException("Unexpected request object status: " + requestObjectResponse.getStatus());
@@ -74,22 +112,10 @@ public class OID4VPBasicWallet {
         }
     }
 
-    public DirectPostResponse submitDirectPost(AuthorizationRequest authorizationRequest, String vpToken) throws Exception {
-        try (SimpleHttpResponse response = submitDirectPostResponse(authorizationRequest, vpToken)) {
-            return response.asJson(DirectPostResponse.class);
-        }
-    }
-
-    public int submitDirectPostStatus(AuthorizationRequest authorizationRequest, String vpToken) throws Exception {
-        try (SimpleHttpResponse response = submitDirectPostResponse(authorizationRequest, vpToken)) {
-            return response.getStatus();
-        }
-    }
-
-    private SimpleHttpResponse submitDirectPostResponse(AuthorizationRequest authorizationRequest, String vpToken) throws Exception {
+    private SimpleHttpResponse submitDirectPostResponse(AuthorizationRequest authorizationRequest, TestVpToken vpToken) throws Exception {
         return redirectlessHttp.doPost(authorizationRequest.getResponseUri())
                 .param(OID4VPConstants.STATE, authorizationRequest.getState())
-                .param(OID4VPConstants.VP_TOKEN, vpToken)
+                .param(OID4VPConstants.VP_TOKEN, vpToken.value())
                 .asResponse();
     }
 

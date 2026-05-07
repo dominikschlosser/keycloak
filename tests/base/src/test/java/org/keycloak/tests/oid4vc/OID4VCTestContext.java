@@ -17,9 +17,14 @@ import org.keycloak.protocol.oid4vc.model.CredentialResponse.Credential;
 import org.keycloak.protocol.oid4vc.model.CredentialScopeRepresentation;
 import org.keycloak.protocol.oid4vc.model.CredentialsOffer;
 import org.keycloak.protocol.oid4vc.model.OID4VCAuthorizationDetail;
+import org.keycloak.protocol.oid4vc.model.presentation.AuthorizationRequest;
+import org.keycloak.protocol.oid4vc.model.presentation.DirectPostResponse;
 import org.keycloak.protocol.oidc.representations.OIDCConfigurationRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.tests.oid4vc.abca.OIDCClientAttester;
+import org.keycloak.tests.oid4vc.presentation.OID4VPBasicWallet;
+import org.keycloak.tests.oid4vc.presentation.TestCredential;
+import org.keycloak.tests.oid4vc.presentation.TestCredentialBuilder;
 import org.keycloak.testsuite.util.oauth.AccessTokenResponse;
 import org.keycloak.testsuite.util.oauth.oid4vc.CredentialOfferResponse;
 import org.keycloak.testsuite.util.oauth.oid4vc.CredentialOfferUriResponse;
@@ -44,6 +49,18 @@ public class OID4VCTestContext {
     public static final AttachmentKey<AccessTokenResponse> ACCESS_TOKEN_RESPONSE_ATTACHMENT_KEY = new AttachmentKey<>(AccessTokenResponse.class);
     public static final AttachmentKey<Oid4vcCredentialResponse> CREDENTIALS_RESPONSE_ATTACHMENT_KEY = new AttachmentKey<>(Oid4vcCredentialResponse.class);
     public static final AttachmentKey<Credential[]> CREDENTIALS_ATTACHMENT_KEY = new AttachmentKey<>(Credential[].class);
+    public static final AttachmentKey<OID4VPBasicWallet.WalletAuthorizationRequest> WALLET_AUTHORIZATION_REQUEST_ATTACHMENT_KEY =
+            new AttachmentKey<>(OID4VPBasicWallet.WalletAuthorizationRequest.class);
+    public static final AttachmentKey<AuthorizationRequest> AUTHORIZATION_REQUEST_ATTACHMENT_KEY =
+            new AttachmentKey<>(AuthorizationRequest.class);
+    public static final AttachmentKey<TestCredentialBuilder> TRUSTED_ISSUER_ATTACHMENT_KEY =
+            new AttachmentKey<>("trustedIssuer", TestCredentialBuilder.class);
+    public static final AttachmentKey<TestCredentialBuilder> CREDENTIAL_BUILDER_ATTACHMENT_KEY =
+            new AttachmentKey<>("credentialBuilder", TestCredentialBuilder.class);
+    public static final AttachmentKey<TestCredential> CREDENTIAL_ATTACHMENT_KEY =
+            new AttachmentKey<>(TestCredential.class);
+    public static final AttachmentKey<DirectPostResponse> DIRECT_POST_RESPONSE_ATTACHMENT_KEY =
+            new AttachmentKey<>(DirectPostResponse.class);
 
     private String issuer;      // Issuing username (i.e. agent who creates credential offers)
     private String holder;      // Holder who requests the credential
@@ -52,6 +69,10 @@ public class OID4VCTestContext {
     private CredentialScopeRepresentation credentialScope;
 
     private final Map<AttachmentKey<?>, Object> attachments = new HashMap<>();
+
+    public OID4VCTestContext() {
+        this(null);
+    }
 
     public OID4VCTestContext(ClientRepresentation client, CredentialScopeRepresentation credentialScope) {
         this(client);
@@ -208,6 +229,37 @@ public class OID4VCTestContext {
     public List<Credential> findCredentials(Predicate<Credential> predicate) {
         return getCredentials().stream().filter(predicate).toList();
 
+    }
+
+    public OID4VCTestContext withTrustedIssuer(TestCredentialBuilder trustedIssuer) {
+        putAttachment(TRUSTED_ISSUER_ATTACHMENT_KEY, trustedIssuer);
+        return this;
+    }
+
+    public TestCredentialBuilder getTrustedIssuer() {
+        return assertAttachment(TRUSTED_ISSUER_ATTACHMENT_KEY);
+    }
+
+    public OID4VCTestContext withCredentialBuilder(TestCredentialBuilder credentialBuilder) {
+        putAttachment(CREDENTIAL_BUILDER_ATTACHMENT_KEY, credentialBuilder);
+        return this;
+    }
+
+    public TestCredentialBuilder getCredentialBuilder() {
+        return assertAttachment(CREDENTIAL_BUILDER_ATTACHMENT_KEY);
+    }
+
+    public OID4VCTestContext withCredential(TestCredential credential) {
+        putAttachment(CREDENTIAL_ATTACHMENT_KEY, credential);
+        return this;
+    }
+
+    public TestCredential getCredential() {
+        return assertAttachment(CREDENTIAL_ATTACHMENT_KEY);
+    }
+
+    public AuthorizationRequest getAuthorizationRequest() {
+        return assertAttachment(AUTHORIZATION_REQUEST_ATTACHMENT_KEY);
     }
 
     // Attachment Support ----------------------------------------------------------------------------------------------

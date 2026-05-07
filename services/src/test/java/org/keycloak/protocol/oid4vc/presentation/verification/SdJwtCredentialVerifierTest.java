@@ -18,7 +18,11 @@ package org.keycloak.protocol.oid4vc.presentation.verification;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
+import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,9 +30,13 @@ import org.keycloak.OID4VCConstants;
 import org.keycloak.VCFormat;
 import org.keycloak.common.crypto.CryptoIntegration;
 import org.keycloak.common.crypto.CryptoProvider;
+import org.keycloak.common.util.CertificateUtils;
+import org.keycloak.common.util.PemUtils;
 import org.keycloak.common.util.Time;
 import org.keycloak.crypto.KeyUse;
 import org.keycloak.crypto.KeyWrapper;
+import org.keycloak.jose.jwk.JWK;
+import org.keycloak.jose.jwk.JSONWebKeySet;
 import org.keycloak.jose.jwk.JWKBuilder;
 import org.keycloak.sdjwt.IssuerSignedJWT;
 import org.keycloak.sdjwt.SdJwt;
@@ -99,16 +107,164 @@ public class SdJwtCredentialVerifierTest {
                 "wrong-nonce")));
     }
 
+    @Test
+    public void testVerifySdJwtCredentialWithTrustedX5cChain() throws Exception {
+        KeyWrapper rootKey = createRsaKey("root-key");
+        KeyWrapper issuerKey = createRsaKey("issuer-key");
+        KeyWrapper holderKey = createEcKey("holder-key");
+        X509Certificate rootCertificate = CertificateUtils.generateV1SelfSignedCertificate(
+                keyPair(rootKey), "root-ca");
+        X509Certificate issuerCertificate = CertificateUtils.generateV3Certificate(
+                keyPair(issuerKey),
+                (PrivateKey) rootKey.getPrivateKey(),
+                rootCertificate,
+                "issuer");
+        List<X509Certificate> certificateChain = List.of(issuerCertificate, rootCertificate);
+        SdJwtCredentialVerifier verifier = new SdJwtCredentialVerifier(null, List.of(
+                new X5cTrustedSdJwtIssuer(PemUtils.encodeCertificate(rootCertificate), false)));
+
+        CredentialVerificationResult result = verifier.verify(new CredentialVerificationRequest(
+                createCredential(issuerKey, holderKey, AUDIENCE, NONCE, ISSUER, certificateChain),
+                AUDIENCE,
+                NONCE,
+                PemUtils.encodeCertificate(rootCertificate)));
+
+        assertEquals(ISSUER, result.getIssuer());
+        assertEquals(SUBJECT, result.getClaims().get("sub"));
+    }
+
+    @Test
+    public void testVerifySdJwtCredentialRejectsUntrustedX5cChain() throws Exception {
+        KeyWrapper rootKey = createRsaKey("root-key");
+        KeyWrapper issuerKey = createRsaKey("issuer-key");
+        KeyWrapper trustedKey = createRsaKey("trusted-key");
+        KeyWrapper holderKey = createEcKey("holder-key");
+        X509Certificate rootCertificate = CertificateUtils.generateV1SelfSignedCertificate(
+                keyPair(rootKey), "root-ca");
+        X509Certificate issuerCertificate = CertificateUtils.generateV3Certificate(
+                keyPair(issuerKey),
+                (PrivateKey) rootKey.getPrivateKey(),
+                rootCertificate,
+                "issuer");
+        X509Certificate trustedCertificate = CertificateUtils.generateV1SelfSignedCertificate(
+                keyPair(trustedKey), "trusted-ca");
+        SdJwtCredentialVerifier verifier = new SdJwtCredentialVerifier(null, List.of(
+                new X5cTrustedSdJwtIssuer(PemUtils.encodeCertificate(trustedCertificate), false)));
+        String credential = createCredential(
+                issuerKey,
+                holderKey,
+                AUDIENCE,
+                NONCE,
+                ISSUER,
+                List.of(issuerCertificate, rootCertificate));
+
+        assertThrows(CredentialVerificationException.class, () -> verifier.verify(new CredentialVerificationRequest(
+                credential,
+                AUDIENCE,
+                NONCE,
+                PemUtils.encodeCertificate(trustedCertificate))));
+    }
+
+    @Test
+    public void testVerifySdJwtCredentialRejectsSelfSignedX5cOutsideDevMode() throws Exception {
+        KeyWrapper issuerKey = createRsaKey("issuer-key");
+        KeyWrapper holderKey = createEcKey("holder-key");
+        X509Certificate issuerCertificate = CertificateUtils.generateV1SelfSignedCertificate(
+                keyPair(issuerKey), "issuer");
+        TrustedSdJwtIssuer trustedIssuer = new X5cTrustedSdJwtIssuer(
+                PemUtils.encodeCertificate(issuerCertificate),
+                false);
+        SdJwtCredentialVerifier verifier = new SdJwtCredentialVerifier(null, List.of(trustedIssuer));
+        String credential = createCredential(
+                issuerKey,
+                holderKey,
+                AUDIENCE,
+                NONCE,
+                ISSUER,
+                List.of(issuerCertificate));
+
+        assertThrows(CredentialVerificationException.class, () -> verifier.verify(new CredentialVerificationRequest(
+                credential,
+                AUDIENCE,
+                NONCE)));
+    }
+
+    @Test
+    public void testVerifySdJwtCredentialAllowsSelfSignedX5cInDevMode() throws Exception {
+        KeyWrapper issuerKey = createRsaKey("issuer-key");
+        KeyWrapper holderKey = createEcKey("holder-key");
+        X509Certificate issuerCertificate = CertificateUtils.generateV1SelfSignedCertificate(
+                keyPair(issuerKey), "issuer");
+        TrustedSdJwtIssuer trustedIssuer = new X5cTrustedSdJwtIssuer(
+                PemUtils.encodeCertificate(issuerCertificate),
+                true);
+        SdJwtCredentialVerifier verifier = new SdJwtCredentialVerifier(null, List.of(trustedIssuer));
+
+        CredentialVerificationResult result = verifier.verify(new CredentialVerificationRequest(
+                createCredential(issuerKey, holderKey, AUDIENCE, NONCE, ISSUER, List.of(issuerCertificate)),
+                AUDIENCE,
+                NONCE));
+
+        assertEquals(ISSUER, result.getIssuer());
+    }
+
+    @Test
+    public void testVerifySdJwtCredentialUsesJwtVcIssuerMetadata() throws Exception {
+        KeyWrapper rootKey = createRsaKey("root-key");
+        KeyWrapper issuerKey = createRsaKey("issuer-key");
+        KeyWrapper holderKey = createEcKey("holder-key");
+        X509Certificate rootCertificate = CertificateUtils.generateV1SelfSignedCertificate(
+                keyPair(rootKey), "root-ca");
+        X509Certificate issuerCertificate = CertificateUtils.generateV3Certificate(
+                keyPair(issuerKey),
+                (PrivateKey) rootKey.getPrivateKey(),
+                rootCertificate,
+                "issuer");
+
+        JSONWebKeySet jwks = new JSONWebKeySet();
+        jwks.setKeys(new JWK[]{
+                JWKBuilder.create()
+                        .kid(issuerKey.getKid())
+                        .algorithm(issuerKey.getAlgorithm())
+                        .rsa(issuerKey.getPublicKey(), List.of(issuerCertificate, rootCertificate))
+        });
+        ObjectNode metadata = JsonSerialization.mapper.createObjectNode();
+        metadata.put("issuer", ISSUER);
+        metadata.set("jwks", JsonSerialization.mapper.valueToTree(jwks));
+
+        TrustedSdJwtIssuer trustedIssuer = new JwtVcIssuerMetadataTrustedSdJwtIssuer(
+                null,
+                PemUtils.encodeCertificate(rootCertificate),
+                uri -> {
+                    assertEquals("https://issuer.example.org/.well-known/jwt-vc-issuer", uri);
+                    return metadata;
+                },
+                false);
+        SdJwtCredentialVerifier verifier = new SdJwtCredentialVerifier(null, List.of(trustedIssuer));
+
+        CredentialVerificationResult result = verifier.verify(new CredentialVerificationRequest(
+                createCredential(issuerKey, holderKey, AUDIENCE, NONCE),
+                AUDIENCE,
+                NONCE));
+
+        assertEquals(ISSUER, result.getIssuer());
+    }
+
     private SdJwtCredentialVerifier createVerifier(KeyWrapper issuerKey) {
         TrustedSdJwtIssuer trustedIssuer = issuerSignedJWT -> List.of(KeyWrapperUtil.createSignatureVerifierContext(issuerKey));
         return new SdJwtCredentialVerifier(null, List.of(trustedIssuer));
     }
 
     private String createCredential(KeyWrapper issuerKey, KeyWrapper holderKey, String audience, String nonce) {
+        return createCredential(issuerKey, holderKey, audience, nonce, ISSUER, null);
+    }
+
+    private String createCredential(KeyWrapper issuerKey, KeyWrapper holderKey, String audience, String nonce,
+                                    String issuer, List<X509Certificate> certificateChain) {
         int now = Time.currentTime();
 
         ObjectNode claims = JsonSerialization.mapper.createObjectNode();
-        claims.put(OID4VCConstants.CLAIM_NAME_ISSUER, ISSUER);
+        claims.put(OID4VCConstants.CLAIM_NAME_ISSUER, issuer);
         claims.put("sub", SUBJECT);
         claims.put("given_name", "Alice");
         claims.put("family_name", "Doe");
@@ -123,6 +279,11 @@ public class SdJwtCredentialVerifierTest {
                 .withKeyBindingKey(JWKBuilder.create().ec(holderKey.getPublicKey()))
                 .withKid(issuerKey.getKid())
                 .build();
+        if (certificateChain != null) {
+            issuerSignedJWT.getJwsHeader().setX5c(certificateChain.stream()
+                    .map(SdJwtCredentialVerifierTest::encodeCertificate)
+                    .toList());
+        }
 
         KeyBindingJWT keyBindingJWT = KeyBindingJWT.builder()
                 .withIat(now)
@@ -154,5 +315,32 @@ public class SdJwtCredentialVerifierTest {
         key.setPublicKey(keyPair.getPublic());
         key.setPrivateKey(keyPair.getPrivate());
         return key;
+    }
+
+    private KeyWrapper createRsaKey(String prefix) throws Exception {
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+        keyPairGenerator.initialize(2048);
+        KeyPair keyPair = keyPairGenerator.generateKeyPair();
+
+        KeyWrapper key = new KeyWrapper();
+        key.setKid(prefix + "-" + UUID.randomUUID());
+        key.setUse(KeyUse.SIG);
+        key.setAlgorithm("RS256");
+        key.setType("RSA");
+        key.setPublicKey(keyPair.getPublic());
+        key.setPrivateKey(keyPair.getPrivate());
+        return key;
+    }
+
+    private static String encodeCertificate(X509Certificate certificate) {
+        try {
+            return Base64.getEncoder().encodeToString(certificate.getEncoded());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static KeyPair keyPair(KeyWrapper key) {
+        return new KeyPair((PublicKey) key.getPublicKey(), (PrivateKey) key.getPrivateKey());
     }
 }

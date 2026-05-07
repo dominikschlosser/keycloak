@@ -216,7 +216,11 @@ public class OID4VPEndpoint {
         }
 
         String credential = sdJwtCredentialFromVpToken(vpToken);
-        return verifier.verify(new CredentialVerificationRequest(credential, expectedAudience, expectedNonce));
+        return verifier.verify(new CredentialVerificationRequest(
+                credential,
+                expectedAudience,
+                expectedNonce,
+                provider.getConfig().getTrustedIssuerCertificate()));
     }
 
     private String sdJwtCredentialFromVpToken(String vpToken) throws CredentialVerificationException {
@@ -233,14 +237,19 @@ public class OID4VPEndpoint {
             throw new CredentialVerificationException("VP token must be a JSON object");
         }
 
-        JsonNode presentations = vpTokenJson.get(OID4VPIdentityProvider.CREDENTIAL_QUERY_ID);
+        String credentialQueryId;
+        try {
+            credentialQueryId = provider.getCredentialQueryId();
+        } catch (IllegalArgumentException e) {
+            throw new CredentialVerificationException("Invalid DCQL query configuration", e);
+        }
+
+        JsonNode presentations = vpTokenJson.get(credentialQueryId);
         if (presentations == null || !presentations.isArray()) {
-            throw new CredentialVerificationException("VP token is missing credential query result: "
-                    + OID4VPIdentityProvider.CREDENTIAL_QUERY_ID);
+            throw new CredentialVerificationException("VP token is missing credential query result: " + credentialQueryId);
         }
         if (presentations.size() != 1) {
-            throw new CredentialVerificationException("Expected exactly one presentation for credential query: "
-                    + OID4VPIdentityProvider.CREDENTIAL_QUERY_ID);
+            throw new CredentialVerificationException("Expected exactly one presentation for credential query: " + credentialQueryId);
         }
 
         JsonNode presentation = presentations.get(0);

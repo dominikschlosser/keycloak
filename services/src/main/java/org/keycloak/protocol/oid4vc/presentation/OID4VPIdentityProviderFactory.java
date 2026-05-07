@@ -63,7 +63,19 @@ public class OID4VPIdentityProviderFactory extends AbstractIdentityProviderFacto
         subjectClaimName.setType(ProviderConfigProperty.STRING_TYPE);
         subjectClaimName.setDefaultValue(OID4VPIdentityProviderConfig.DEFAULT_SUBJECT_CLAIM_NAME);
 
-        return List.of(walletScheme, requestObjectLifespan, subjectClaimName);
+        ProviderConfigProperty trustedIssuerCertificate = new ProviderConfigProperty();
+        trustedIssuerCertificate.setName(OID4VPIdentityProviderConfig.TRUSTED_ISSUER_CERTIFICATE);
+        trustedIssuerCertificate.setLabel("Trusted Issuer Certificate");
+        trustedIssuerCertificate.setHelpText("PEM encoded certificate used to trust SD-JWT VC issuer certificate chains.");
+        trustedIssuerCertificate.setType(ProviderConfigProperty.TEXT_TYPE);
+
+        ProviderConfigProperty dcqlQuery = new ProviderConfigProperty();
+        dcqlQuery.setName(OID4VPIdentityProviderConfig.DCQL_QUERY);
+        dcqlQuery.setLabel("DCQL Query");
+        dcqlQuery.setHelpText("DCQL query JSON used in generated OID4VP authorization requests.");
+        dcqlQuery.setType(ProviderConfigProperty.TEXT_TYPE);
+
+        return List.of(walletScheme, requestObjectLifespan, subjectClaimName, trustedIssuerCertificate, dcqlQuery);
     }
 
     @Override

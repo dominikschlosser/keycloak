@@ -16,6 +16,7 @@
  */
 package org.keycloak.protocol.oid4vc.presentation;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -117,7 +118,7 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
                 .setResponseUri(responseUri)
                 .setState(state)
                 .setNonce(nonce)
-                .setDcqlQuery(createStaticDcqlQuery());
+                .setDcqlQuery(createDcqlQuery());
     }
 
     String getVerifierEndpoint(RealmModel realm) {
@@ -131,8 +132,29 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
                 .toString();
     }
 
-    private DcqlQuery createStaticDcqlQuery() {
-        // TODO: Replace this hardcoded DCQL query with configurable verifier policy input.
+    String getCredentialQueryId() {
+        List<DcqlCredentialQuery> credentialQueries = createDcqlQuery().getCredentials();
+        if (credentialQueries == null || credentialQueries.size() != 1) {
+            throw new IllegalArgumentException("OID4VP identity provider requires exactly one DCQL credential query");
+        }
+
+        String credentialQueryId = credentialQueries.get(0).getId();
+        if (credentialQueryId == null || credentialQueryId.isBlank()) {
+            throw new IllegalArgumentException("OID4VP identity provider DCQL credential query requires an id");
+        }
+        return credentialQueryId;
+    }
+
+    DcqlQuery createDcqlQuery() {
+        String configured = getConfig().getDcqlQuery();
+        if (configured != null) {
+            try {
+                return JsonSerialization.readValue(configured, DcqlQuery.class);
+            } catch (IOException e) {
+                throw new IllegalArgumentException("Invalid DCQL query configuration", e);
+            }
+        }
+
         return new DcqlQuery().setCredentials(List.of(
                 new DcqlCredentialQuery()
                         .setId(CREDENTIAL_QUERY_ID)

@@ -21,20 +21,14 @@ import java.util.List;
 import org.keycloak.OID4VCConstants;
 import org.keycloak.VCFormat;
 import org.keycloak.common.VerificationException;
-import org.keycloak.crypto.KeyUse;
-import org.keycloak.crypto.KeyWrapper;
-import org.keycloak.crypto.SignatureVerifierContext;
-import org.keycloak.jose.jws.JWSHeader;
+import org.keycloak.common.util.Environment;
 import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.RealmModel;
-import org.keycloak.sdjwt.IssuerSignedJWT;
 import org.keycloak.sdjwt.IssuerSignedJwtVerificationOpts;
 import org.keycloak.sdjwt.VerifiedSdJwt;
 import org.keycloak.sdjwt.consumer.SdJwtPresentationConsumer;
 import org.keycloak.sdjwt.consumer.TrustedSdJwtIssuer;
 import org.keycloak.sdjwt.vp.KeyBindingJwtVerificationOpts;
 import org.keycloak.sdjwt.vp.SdJwtVP;
-import org.keycloak.util.KeyWrapperUtil;
 
 public class SdJwtCredentialVerifier implements CredentialVerifier {
 
@@ -92,7 +86,7 @@ public class SdJwtCredentialVerifier implements CredentialVerifier {
             VerifiedSdJwt verifiedSdJwt = presentationConsumer.verifySdJwtPresentation(
                     sdJwtVP,
                     null,
-                    getTrustedIssuers(),
+                    getTrustedIssuers(request),
                     issuerOpts,
                     kbOptsBuilder.build());
 
@@ -114,50 +108,19 @@ public class SdJwtCredentialVerifier implements CredentialVerifier {
                 .setCredentialType(verifiedSdJwt.getStringClaim("vct").orElse(null));
     }
 
-    private List<TrustedSdJwtIssuer> getTrustedIssuers() {
-        return trustedIssuers != null ? trustedIssuers : List.of(new RealmKeysTrustedSdJwtIssuer(session));
-    }
-
-    private static class RealmKeysTrustedSdJwtIssuer implements TrustedSdJwtIssuer {
-
-        private final KeycloakSession session;
-
-        private RealmKeysTrustedSdJwtIssuer(KeycloakSession session) {
-            this.session = session;
+    private List<TrustedSdJwtIssuer> getTrustedIssuers(CredentialVerificationRequest request) {
+        if (trustedIssuers != null) {
+            return trustedIssuers;
         }
 
-        @Override
-        public List<SignatureVerifierContext> resolveIssuerVerifyingKeys(IssuerSignedJWT issuerSignedJWT)
-                throws VerificationException {
-            RealmModel realm = session.getContext().getRealm();
-            JWSHeader header = issuerSignedJWT.getJwsHeader();
-            String algorithm = header != null && header.getAlgorithm() != null ? header.getAlgorithm().name() : null;
-            if (algorithm == null) {
-                throw new VerificationException("Missing SD-JWT issuer signature algorithm");
-            }
-
-            String kid = header.getKeyId();
-            if (kid != null) {
-                KeyWrapper key = session.keys().getKey(realm, kid, KeyUse.SIG, algorithm);
-                if (key == null || key.getPublicKey() == null) {
-                    throw new VerificationException("No realm signing key found for SD-JWT issuer kid: " + kid);
-                }
-                return List.of(toVerifierContext(key));
-            }
-
-            List<SignatureVerifierContext> verifiers = session.keys().getKeysStream(realm, KeyUse.SIG, algorithm)
-                    .filter(key -> key.getPublicKey() != null)
-                    .map(RealmKeysTrustedSdJwtIssuer::toVerifierContext)
-                    .toList();
-            if (verifiers.isEmpty()) {
-                throw new VerificationException("No realm signing keys available for SD-JWT issuer algorithm: " + algorithm);
-            }
-
-            return verifiers;
-        }
-
-        private static SignatureVerifierContext toVerifierContext(KeyWrapper key) {
-            return KeyWrapperUtil.createSignatureVerifierContext(key);
-        }
+        boolean allowSelfSigned = Environment.isDevMode();
+        return List.of(
+                new RealmCertificateTrustedSdJwtIssuer(session, allowSelfSigned),
+                new X5cTrustedSdJwtIssuer(request.getTrustedIssuerCertificate(), allowSelfSigned),
+                new JwtVcIssuerMetadataTrustedSdJwtIssuer(
+                        session,
+                        request.getTrustedIssuerCertificate(),
+                        OID4VPIssuerUtil.httpDataFetcher(session),
+                        allowSelfSigned));
     }
 }
