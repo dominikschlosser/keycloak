@@ -284,14 +284,11 @@ public class OID4VPIdentityProviderTest {
         }
 
         KeyPair verifierKey = createVerifierSigningKey();
-        X509Certificate verifierCertificate = CertificateUtils.generateV1SelfSignedCertificate(verifierKey, "oid4vp-verifier");
+        X509Certificate verifierCertificate = createVerifierSigningCertificate(verifierKey, clientIdentifierPrefix);
 
         config.put(OID4VPIdentityProviderConfig.X509_CERTIFICATE_PEM,
                 PemUtils.encodeCertificate(verifierCertificate));
         config.put(OID4VPIdentityProviderConfig.X509_PRIVATE_KEY_PEM, pkcs8PrivateKeyPem(verifierKey));
-        if (clientIdentifierPrefix == ClientIdentifierPrefix.X509_SAN_DNS) {
-            config.put(OID4VPIdentityProviderConfig.X509_SAN_DNS_NAME, VERIFIER_DNS_NAME);
-        }
     }
 
     private KeyPair createVerifierSigningKey() {
@@ -301,6 +298,22 @@ public class OID4VPIdentityProviderTest {
             return generator.generateKeyPair();
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Failed to create OID4VP verifier signing key", e);
+        }
+    }
+
+    private X509Certificate createVerifierSigningCertificate(KeyPair keyPair, ClientIdentifierPrefix clientIdentifierPrefix) {
+        if (clientIdentifierPrefix == ClientIdentifierPrefix.X509_SAN_DNS) {
+            return certificateWithDnsSan(keyPair, VERIFIER_DNS_NAME);
+        }
+        return CertificateUtils.generateV1SelfSignedCertificate(keyPair, "oid4vp-verifier");
+    }
+
+    private X509Certificate certificateWithDnsSan(KeyPair keyPair, String dnsName) {
+        try {
+            X509Certificate caCert = CertificateUtils.generateV1SelfSignedCertificate(keyPair, dnsName);
+            return CertificateUtils.generateV3Certificate(keyPair, keyPair.getPrivate(), caCert, dnsName, List.of(dnsName));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to create OID4VP verifier certificate", e);
         }
     }
 

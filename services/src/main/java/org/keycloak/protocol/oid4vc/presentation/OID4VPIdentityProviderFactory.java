@@ -70,12 +70,6 @@ public class OID4VPIdentityProviderFactory extends AbstractIdentityProviderFacto
                 ClientIdentifierPrefix.X509_HASH.getValue()));
         clientIdentifierPrefix.setDefaultValue(ClientIdentifierPrefix.REDIRECT_URI.getValue());
 
-        ProviderConfigProperty x509SanDnsName = new ProviderConfigProperty();
-        x509SanDnsName.setName(OID4VPIdentityProviderConfig.X509_SAN_DNS_NAME);
-        x509SanDnsName.setLabel("X.509 SAN DNS Name");
-        x509SanDnsName.setHelpText("DNS name used for x509_san_dns client identifiers.");
-        x509SanDnsName.setType(ProviderConfigProperty.STRING_TYPE);
-
         ProviderConfigProperty x509CertificatePem = new ProviderConfigProperty();
         x509CertificatePem.setName(OID4VPIdentityProviderConfig.X509_CERTIFICATE_PEM);
         x509CertificatePem.setLabel("X.509 Certificate (PEM)");
@@ -118,7 +112,6 @@ public class OID4VPIdentityProviderFactory extends AbstractIdentityProviderFacto
                 walletScheme,
                 authorizationRequestTransport,
                 clientIdentifierPrefix,
-                x509SanDnsName,
                 x509CertificatePem,
                 x509PrivateKeyPem,
                 requestObjectLifespan,

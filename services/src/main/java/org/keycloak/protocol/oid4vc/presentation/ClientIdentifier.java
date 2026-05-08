@@ -63,11 +63,10 @@ final class ClientIdentifier {
 
     static ClientIdentifier resolve(ClientIdentifierPrefix prefix,
                                     String responseUri,
-                                    X509Certificate signingCertificate,
-                                    String x509SanDnsName) {
+                                    X509Certificate signingCertificate) {
         return switch (prefix) {
             case REDIRECT_URI -> redirectUri(responseUri);
-            case X509_SAN_DNS -> x509SanDns(resolveX509SanDnsName(signingCertificate, x509SanDnsName));
+            case X509_SAN_DNS -> x509SanDns(resolveX509SanDnsName(signingCertificate));
             case X509_HASH -> x509Hash(signingCertificate);
         };
     }
@@ -94,13 +93,9 @@ final class ClientIdentifier {
         }
     }
 
-    private static String resolveX509SanDnsName(X509Certificate signingCertificate, String configuredDnsName) {
+    static String resolveX509SanDnsName(X509Certificate signingCertificate) {
         if (signingCertificate == null) {
             throw new IllegalArgumentException("OID4VP x509_san_dns client id requires a signing certificate");
-        }
-        if (configuredDnsName != null && !configuredDnsName.isBlank()) {
-            // TODO: Validate the configured DNS name against the leaf certificate dNSName SAN from the request object x5c header.
-            return configuredDnsName;
         }
         String certificateDnsName = extractDnsSubjectAlternativeName(signingCertificate);
         if (certificateDnsName != null) {

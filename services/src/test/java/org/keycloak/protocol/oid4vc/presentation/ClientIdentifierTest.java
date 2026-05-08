@@ -16,11 +16,10 @@
  */
 package org.keycloak.protocol.oid4vc.presentation;
 
-import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
-import java.util.Date;
+import java.util.List;
 
 import org.keycloak.common.crypto.CryptoIntegration;
 import org.keycloak.common.crypto.CryptoProvider;
@@ -28,15 +27,6 @@ import org.keycloak.common.util.Base64Url;
 import org.keycloak.common.util.CertificateUtils;
 import org.keycloak.common.util.KeyUtils;
 
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.Extension;
-import org.bouncycastle.asn1.x509.GeneralName;
-import org.bouncycastle.asn1.x509.GeneralNames;
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
-import org.bouncycastle.cert.X509v3CertificateBuilder;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -92,23 +82,9 @@ public class ClientIdentifierTest {
         ClientIdentifier clientIdentifier = ClientIdentifier.resolve(
                 ClientIdentifierPrefix.REDIRECT_URI,
                 RESPONSE_URI,
-                null,
                 null);
 
         assertEquals("redirect_uri:" + RESPONSE_URI, clientIdentifier.getValue());
-    }
-
-    @Test
-    public void testResolveUsesConfiguredDnsNameForX509SanDnsPrefix() {
-        X509Certificate certificate = certificate();
-
-        ClientIdentifier clientIdentifier = ClientIdentifier.resolve(
-                ClientIdentifierPrefix.X509_SAN_DNS,
-                RESPONSE_URI,
-                certificate,
-                "registration.example.org");
-
-        assertEquals("x509_san_dns:registration.example.org", clientIdentifier.getValue());
     }
 
     @Test
@@ -116,8 +92,17 @@ public class ClientIdentifierTest {
         assertThrows(IllegalArgumentException.class, () -> ClientIdentifier.resolve(
                 ClientIdentifierPrefix.X509_SAN_DNS,
                 RESPONSE_URI,
-                null,
-                "registration.example.org"));
+                null));
+    }
+
+    @Test
+    public void testResolveX509SanDnsPrefixRequiresCertificateSan() {
+        X509Certificate certificate = certificate();
+
+        assertThrows(IllegalArgumentException.class, () -> ClientIdentifier.resolve(
+                ClientIdentifierPrefix.X509_SAN_DNS,
+                RESPONSE_URI,
+                certificate));
     }
 
     @Test
@@ -127,8 +112,7 @@ public class ClientIdentifierTest {
         ClientIdentifier clientIdentifier = ClientIdentifier.resolve(
                 ClientIdentifierPrefix.X509_SAN_DNS,
                 RESPONSE_URI,
-                certificate,
-                null);
+                certificate);
 
         assertEquals("x509_san_dns:verifier-cert.example.org", clientIdentifier.getValue());
     }
@@ -141,8 +125,7 @@ public class ClientIdentifierTest {
         ClientIdentifier clientIdentifier = ClientIdentifier.resolve(
                 ClientIdentifierPrefix.X509_HASH,
                 RESPONSE_URI,
-                certificate,
-                null);
+                certificate);
 
         assertEquals("x509_hash:" + expectedThumbprint, clientIdentifier.getValue());
     }
@@ -152,7 +135,6 @@ public class ClientIdentifierTest {
         assertThrows(IllegalArgumentException.class, () -> ClientIdentifier.resolve(
                 ClientIdentifierPrefix.X509_HASH,
                 RESPONSE_URI,
-                null,
                 null));
     }
 
@@ -162,20 +144,7 @@ public class ClientIdentifierTest {
 
     private X509Certificate certificateWithDnsSan(String dnsName) throws Exception {
         KeyPair keyPair = KeyUtils.generateEcKeyPair("secp256r1");
-        X500Name subject = new X500Name("CN=" + dnsName);
-        Date notBefore = new Date(System.currentTimeMillis());
-        Date notAfter = new Date(System.currentTimeMillis() + 3600000);
-        SubjectPublicKeyInfo publicKeyInfo = SubjectPublicKeyInfo.getInstance(keyPair.getPublic().getEncoded());
-        X509v3CertificateBuilder certificateBuilder = new X509v3CertificateBuilder(
-                subject,
-                BigInteger.valueOf(System.currentTimeMillis()),
-                notBefore,
-                notAfter,
-                subject,
-                publicKeyInfo);
-        certificateBuilder.addExtension(Extension.subjectAlternativeName, false,
-                new GeneralNames(new GeneralName(GeneralName.dNSName, dnsName)));
-        ContentSigner signer = new JcaContentSignerBuilder("SHA256WithECDSA").build(keyPair.getPrivate());
-        return new JcaX509CertificateConverter().getCertificate(certificateBuilder.build(signer));
+        X509Certificate caCert = CertificateUtils.generateV1SelfSignedCertificate(keyPair, dnsName);
+        return CertificateUtils.generateV3Certificate(keyPair, keyPair.getPrivate(), caCert, dnsName, List.of(dnsName));
     }
 }

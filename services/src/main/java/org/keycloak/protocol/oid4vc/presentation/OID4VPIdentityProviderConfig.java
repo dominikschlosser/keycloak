@@ -16,6 +16,8 @@
  */
 package org.keycloak.protocol.oid4vc.presentation;
 
+import java.security.cert.X509Certificate;
+
 import org.keycloak.models.IdentityProviderModel;
 import org.keycloak.models.RealmModel;
 
@@ -25,7 +27,6 @@ public class OID4VPIdentityProviderConfig extends IdentityProviderModel {
     public static final String WALLET_SCHEME = "walletScheme";
     public static final String AUTHORIZATION_REQUEST_TRANSPORT = "authorizationRequestTransport";
     public static final String CLIENT_IDENTIFIER_PREFIX = "clientIdentifierPrefix";
-    public static final String X509_SAN_DNS_NAME = "x509SanDnsName";
     public static final String X509_CERTIFICATE_PEM = "x509CertificatePem";
     public static final String X509_PRIVATE_KEY_PEM = "x509PrivateKeyPem";
     public static final String SUBJECT_CLAIM_NAME = "subjectClaimName";
@@ -84,11 +85,10 @@ public class OID4VPIdentityProviderConfig extends IdentityProviderModel {
                 && transport != AuthorizationRequestTransport.REQUEST_URI) {
             throw new IllegalArgumentException("Certificate-bound OID4VP Client Identifier Prefixes require a signed request object");
         }
-    }
-
-    public String getX509SanDnsName() {
-        String configured = getConfig().get(X509_SAN_DNS_NAME);
-        return configured == null || configured.isBlank() ? null : configured;
+        if (prefix == ClientIdentifierPrefix.X509_SAN_DNS) {
+            X509Certificate certificate = RequestObjectSigner.parseCertificate(getX509CertificatePem());
+            ClientIdentifier.resolveX509SanDnsName(certificate);
+        }
     }
 
     public String getX509CertificatePem() {

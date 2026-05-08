@@ -135,8 +135,7 @@ public class OID4VPIdentityProvider extends AbstractIdentityProvider<OID4VPIdent
         return ClientIdentifier.resolve(
                 clientIdentifierPrefix,
                 responseUri,
-                certificate,
-                getConfig().getX509SanDnsName());
+                certificate);
     }
 
     private URI createRequestUriWalletUri(ClientIdentifier clientIdentifier, URI requestUri) {

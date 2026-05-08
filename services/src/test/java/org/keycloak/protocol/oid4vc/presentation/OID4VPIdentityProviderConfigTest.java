@@ -16,12 +16,28 @@
  */
 package org.keycloak.protocol.oid4vc.presentation;
 
+import java.security.KeyPair;
+import java.security.cert.X509Certificate;
+import java.util.List;
+
+import org.keycloak.common.crypto.CryptoIntegration;
+import org.keycloak.common.crypto.CryptoProvider;
+import org.keycloak.common.util.CertificateUtils;
+import org.keycloak.common.util.KeyUtils;
+import org.keycloak.common.util.PemUtils;
+
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
 public class OID4VPIdentityProviderConfigTest {
+
+    @BeforeClass
+    public static void initCrypto() {
+        CryptoIntegration.init(CryptoProvider.class.getClassLoader());
+    }
 
     @Test
     public void testDefaultsUseQueryParameterTransportAndRedirectUriClientIdentifierPrefix() {
@@ -85,5 +101,46 @@ public class OID4VPIdentityProviderConfigTest {
                 ClientIdentifierPrefix.X509_SAN_DNS.getValue());
 
         assertThrows(IllegalArgumentException.class, () -> config.validate(null));
+    }
+
+    @Test
+    public void testRejectsX509SanDnsPrefixWithoutCertificate() {
+        OID4VPIdentityProviderConfig config = requestUriConfig(ClientIdentifierPrefix.X509_SAN_DNS);
+
+        assertThrows(IllegalArgumentException.class, () -> config.validate(null));
+    }
+
+    @Test
+    public void testRejectsX509SanDnsPrefixWithoutCertificateSan() {
+        OID4VPIdentityProviderConfig config = requestUriConfig(ClientIdentifierPrefix.X509_SAN_DNS);
+        config.setX509CertificatePem(PemUtils.encodeCertificate(certificate()));
+
+        assertThrows(IllegalArgumentException.class, () -> config.validate(null));
+    }
+
+    @Test
+    public void testAcceptsX509SanDnsPrefixWithCertificateSan() throws Exception {
+        OID4VPIdentityProviderConfig config = requestUriConfig(ClientIdentifierPrefix.X509_SAN_DNS);
+        config.setX509CertificatePem(PemUtils.encodeCertificate(certificateWithDnsSan("verifier.example.org")));
+
+        config.validate(null);
+    }
+
+    private OID4VPIdentityProviderConfig requestUriConfig(ClientIdentifierPrefix clientIdentifierPrefix) {
+        OID4VPIdentityProviderConfig config = new OID4VPIdentityProviderConfig();
+        config.getConfig().put(OID4VPIdentityProviderConfig.AUTHORIZATION_REQUEST_TRANSPORT,
+                AuthorizationRequestTransport.REQUEST_URI.getValue());
+        config.getConfig().put(OID4VPIdentityProviderConfig.CLIENT_IDENTIFIER_PREFIX, clientIdentifierPrefix.getValue());
+        return config;
+    }
+
+    private X509Certificate certificate() {
+        return CertificateUtils.generateV1SelfSignedCertificate(KeyUtils.generateEcKeyPair("secp256r1"), "oid4vp-verifier");
+    }
+
+    private X509Certificate certificateWithDnsSan(String dnsName) throws Exception {
+        KeyPair keyPair = KeyUtils.generateEcKeyPair("secp256r1");
+        X509Certificate caCert = CertificateUtils.generateV1SelfSignedCertificate(keyPair, dnsName);
+        return CertificateUtils.generateV3Certificate(keyPair, keyPair.getPrivate(), caCert, dnsName, List.of(dnsName));
     }
 }
