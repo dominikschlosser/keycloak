@@ -58,6 +58,12 @@
 
     <profiles>
         <profile>
+            <id>conformance-tests</id>
+            <modules>
+                <module>conformance-tests</module>
+            </modules>
+        </profile>
+        <profile>
             <id>test-migration-util</id>
             <modules>
                 <module>migration-util</module>

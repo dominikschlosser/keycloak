@@ -1,0 +1,84 @@
+{
+  "id": "oid4vci-happy-flow",
+  "keycloak": {
+    "realm": "oid4vci",
+    "holderUsername": "alice",
+    "holderPassword": "password",
+    "credentialConfigurationId": "conformance_sd_jwt_vc",
+    "realmAttributes": {},
+    "clients": [
+      {
+        "clientId": "oid4vci-client",
+        "redirectUriWildcard": false,
+        "authenticatorType": "client-secret",
+        "attributes": {}
+      },
+      {
+        "clientId": "oid4vci-client2",
+        "redirectUriWildcard": true,
+        "authenticatorType": "client-secret",
+        "attributes": {}
+      }
+    ]
+  },
+  "conformance": {
+    "imageTag": "latest",
+    "plans": [
+      {
+        "name": "oid4vci-1_0-issuer-haip-test-plan",
+        "variants": [
+          {
+            "id": "sd-jwt-wallet-initiated",
+            "values": {
+              "credential_format": "sd_jwt_vc",
+              "vci_authorization_code_flow_variant": "wallet_initiated"
+            }
+          }
+        ],
+        "modules": [
+          {
+            "name": "oid4vci-1_0-issuer-happy-flow",
+            "variants": [
+              {
+                "id": "haip-client-attestation-dpop",
+                "values": {
+                  "authorization_request_type": "simple",
+                  "client_auth_type": "client_attestation",
+                  "fapi_profile": "vci_haip",
+                  "fapi_request_method": "unsigned",
+                  "fapi_response_mode": "plain_response",
+                  "openid": "plain_oauth",
+                  "sender_constrain": "dpop",
+                  "vci_credential_encryption": "plain",
+                  "vci_grant_type": "authorization_code"
+                },
+                "keycloak": {
+                  "clients": [
+                    {
+                      "clientId": "oid4vci-client",
+                      "authenticatorType": "attestation-based",
+                      "attributes": {
+                        "attester_trust_idps": "conformance-client-attester",
+                        "request.object.required": "not required",
+                        "tls.client.certificate.bound.access.tokens": "false"
+                      }
+                    },
+                    {
+                      "clientId": "oid4vci-client2",
+                      "authenticatorType": "attestation-based",
+                      "attributes": {
+                        "attester_trust_idps": "conformance-client-attester",
+                        "request.object.required": "not required",
+                        "tls.client.certificate.bound.access.tokens": "false"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

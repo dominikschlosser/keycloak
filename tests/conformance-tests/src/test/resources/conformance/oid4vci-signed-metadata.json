@@ -1,0 +1,58 @@
+{
+  "id": "oid4vci-signed-metadata",
+  "keycloak": {
+    "realm": "oid4vci",
+    "holderUsername": "alice",
+    "holderPassword": "password",
+    "credentialConfigurationId": "conformance_sd_jwt_vc",
+    "realmAttributes": {},
+    "clients": [
+      {
+        "clientId": "oid4vci-client",
+        "redirectUriWildcard": false,
+        "authenticatorType": "client-secret",
+        "attributes": {}
+      },
+      {
+        "clientId": "oid4vci-client2",
+        "redirectUriWildcard": true,
+        "authenticatorType": "client-secret",
+        "attributes": {}
+      }
+    ]
+  },
+  "conformance": {
+    "imageTag": "latest",
+    "plans": [
+      {
+        "name": "oid4vci-1_0-issuer-haip-test-plan",
+        "variants": [
+          {
+            "id": "sd-jwt-wallet-initiated-signed-metadata",
+            "values": {
+              "credential_format": "sd_jwt_vc",
+              "vci_authorization_code_flow_variant": "wallet_initiated"
+            },
+            "keycloak": {
+              "realmAttributes": {
+                "oid4vci.signed_metadata.alg": "ES256",
+                "oid4vci.signed_metadata.lifespan": "3600"
+              }
+            }
+          }
+        ],
+        "modules": [
+          {
+            "name": "oid4vci-1_0-issuer-metadata-test-signed",
+            "variants": [
+              {
+                "id": "default",
+                "values": {}
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

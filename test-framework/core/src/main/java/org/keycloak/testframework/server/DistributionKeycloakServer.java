@@ -219,8 +219,11 @@ public class DistributionKeycloakServer implements KeycloakServer {
         if (INSTALL_DIR.isDirectory()) {
             File[] f = INSTALL_DIR.listFiles();
             if (f != null && f.length == 1) {
-                long fromZipLastModified = FileUtils.readLongFromFile(getZipLastModifiedFile(f[0]));
-                if (fromZipLastModified != dist.lastModified()) {
+                File zipLastModifiedFile = getZipLastModifiedFile(f[0]);
+                if (!zipLastModifiedFile.isFile()) {
+                    log.trace("Deleting incomplete installation from a previous distribution");
+                    FileUtils.delete(INSTALL_DIR);
+                } else if (FileUtils.readLongFromFile(zipLastModifiedFile) != dist.lastModified()) {
                     log.trace("Deleting installation from a previous distribution");
                     FileUtils.delete(INSTALL_DIR);
                 } else {
