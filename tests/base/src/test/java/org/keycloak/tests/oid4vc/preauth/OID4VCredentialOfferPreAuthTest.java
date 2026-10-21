@@ -355,14 +355,40 @@ public class OID4VCredentialOfferPreAuthTest extends OID4VCIssuerTestBase {
             //
             AccessTokenResponse tokenResponse = wallet.accessTokenRequestPreAuth(ctx, preAuthCode).send();
             assertFalse(tokenResponse.isSuccess(), "Token request should have failed for disabled client");
-            assertEquals("invalid_request", tokenResponse.getError());
-            assertTrue(tokenResponse.getErrorDescription().contains("disabled"),
-                    "Error description should mention disabled: " + tokenResponse.getErrorDescription());
+            assertEquals("invalid_client", tokenResponse.getError());
         } finally {
             // Re-enable client
             clientRep.setEnabled(true);
             testRealm.admin().clients().get(ctx.getClient().getId()).update(clientRep);
         }
+    }
+
+    @Test
+    public void testPreAuthOffer_OtherClient() throws Exception {
+
+        var ctx = new OID4VCTestContext(client, jwtTypeCredentialScope);
+
+        // Create Pre-Authorized CredentialOffer
+        //
+        CredentialsOffer credOffer = wallet.createCredentialOffer(ctx, req -> {
+            req.targetUser(ctx.getHolder());
+            req.preAuthorized(true);
+        });
+
+        String preAuthCode = credOffer.getPreAuthorizedCode();
+        assertNotNull(preAuthCode, "preAuthCode");
+
+        // Redeem Pre-Authorized Code with a client the offer was not issued to
+        //
+        oauth.client(pubClient.getClientId(), null);
+        AccessTokenResponse tokenResponse = wallet.accessTokenRequestPreAuth(ctx, preAuthCode).send();
+        assertEquals("invalid_grant", tokenResponse.getError());
+
+        // The offer is still valid for the client it was issued to
+        //
+        oauth.client(client.getClientId(), client.getSecret());
+        tokenResponse = wallet.accessTokenRequestPreAuth(ctx, preAuthCode).send();
+        assertTrue(tokenResponse.isSuccess(), tokenResponse.getErrorDescription());
     }
 
     @Test

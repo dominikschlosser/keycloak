@@ -45,19 +45,27 @@ import static org.keycloak.tests.conformance.vci.VciConformanceRealmUtil.REALM;
 /**
  * Creates a credential offer through the {@code verifiable_credential_offer} application initiated action, the
  * way an issuer application would: the holder logs in at a regular application client with the AIA parameter and
- * Keycloak mints the offer. The action config carries no client id, so the offer has no target client and the
- * wallet redeems it with its own client.
+ * Keycloak mints the offer. An authorization code offer carries no client id, so it has no target client and the
+ * wallet redeems it with its own client. A pre-authorized code offer is bound to the wallet client that redeems it.
  *
  * <p>The login runs in a local headless Chrome. Keycloak is addressed at the hostname the suite containers reach
  * it at, which only resolves inside the container network, so the browser maps that hostname to loopback where
  * the managed Keycloak listens.
  */
-final class VciAiaCredentialOffer {
+public final class VciAiaCredentialOffer {
 
     private VciAiaCredentialOffer() {
     }
 
     static String createOfferUri() {
+        return createOfferUri(false, null);
+    }
+
+    public static String createPreAuthorizedOfferUri(String targetClientId) {
+        return createOfferUri(true, targetClientId);
+    }
+
+    private static String createOfferUri(boolean preAuthorized, String targetClientId) {
         URI keycloakUri = OpenIdConformanceServer.KEYCLOAK_BASE_URI;
 
         ChromeOptions options = new ChromeOptions();
@@ -72,7 +80,7 @@ final class VciAiaCredentialOffer {
                 "--host-resolver-rules=MAP " + keycloakUri.getHost() + " 127.0.0.1");
         WebDriver driver = new ChromeDriver(options);
         try {
-            driver.get(authorizationUrl(keycloakUri));
+            driver.get(authorizationUrl(keycloakUri, preAuthorized, targetClientId));
 
             WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
             wait.until(ExpectedConditions.presenceOfElementLocated(By.id("username")));
@@ -93,10 +101,11 @@ final class VciAiaCredentialOffer {
         }
     }
 
-    private static String authorizationUrl(URI keycloakUri) {
+    private static String authorizationUrl(URI keycloakUri, boolean preAuthorized, String targetClientId) {
         VerifiableCredentialOfferActionConfig actionConfig = new VerifiableCredentialOfferActionConfig();
         actionConfig.setCredentialConfigurationId(CREDENTIAL_CONFIGURATION_ID);
-        actionConfig.setPreAuthorized(false);
+        actionConfig.setPreAuthorized(preAuthorized);
+        actionConfig.setClientId(targetClientId);
 
         String realmBase = keycloakUri + "/realms/" + REALM;
         try {
